@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import interviews, ai, email, health
+from app.api import interviews, ai, email, health, session
 from app.core.config import settings
 
 app = FastAPI(
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(health.router, tags=["health"])
 app.include_router(interviews.router, prefix="/interviews", tags=["interviews"])
+app.include_router(session.router, prefix="/session", tags=["session"])
 app.include_router(ai.router, prefix="/ai", tags=["ai"])
 app.include_router(email.router, prefix="/email", tags=["email"])
 
