@@ -18,7 +18,7 @@ import json
 import asyncio
 from io import BytesIO
 
-from app.services import stt, llm
+from app.services import stt, llm, tts
 
 router = APIRouter()
 
@@ -32,7 +32,9 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     """
     Main WebSocket endpoint for real-time interview.
 
-    Frontend sends: audio chunks (binary)
+    Frontend sends:
+      - JSON message: {"type": "audio_complete"} - signals audio recording is complete
+      - Binary data: audio blob (after audio_complete message)
     Backend sends:
       - transcripts (JSON): {"type": "transcript", "speaker": "user", "text": "..."}
       - AI transcript (JSON): {"type": "transcript", "speaker": "ai", "text": "..."}
@@ -43,18 +45,21 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
 
     # Initialize conversation state for this interview
     conversation_history: List[dict] = []
-    audio_buffer = BytesIO()
-    silence_counter = 0
-    is_speaking = False
-    SILENCE_THRESHOLD = 4  # Number of silent chunks before processing (4 * 500ms = 2 seconds)
+    expecting_audio = False
 
     try:
         # Send initial AI greeting
         greeting = "Hello! Thank you for joining. Let's begin the interview. Tell me a bit about yourself and your background."
+
+        # Generate TTS audio for greeting
+        print(f"🔊 Generating TTS audio for greeting...")
+        audio_data = await tts.text_to_speech(greeting)
+
         await websocket.send_json({
             "type": "transcript",
             "speaker": "ai",
-            "text": greeting
+            "text": greeting,
+            "audio": audio_data  # base64-encoded MP3
         })
         print(f"📤 Sent greeting to {interview_id}")
 
@@ -64,106 +69,104 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
             # Receive data from frontend
             data = await websocket.receive()
 
-            if "bytes" in data:
-                # Audio chunk received
-                audio_chunk = data["bytes"]
-
-                # Always accumulate audio when user is speaking or just started
-                # Simple VAD: Check if audio chunk has meaningful data
-                # WebM chunks typically have size variance - small chunks = silence
-                is_voice_detected = len(audio_chunk) > 1000  # More realistic threshold for 500ms WebM chunks
-
-                if is_voice_detected:
-                    # User is speaking
-                    is_speaking = True
-                    silence_counter = 0
-                    audio_buffer.write(audio_chunk)
-                    print(f"Voice detected, buffer size: {len(audio_buffer.getvalue())} bytes")
-                else:
-                    # Potential silence detected
-                    if is_speaking:
-                        # Still accumulate the chunk in case it's just a brief pause
-                        audio_buffer.write(audio_chunk)
-                        silence_counter += 1
-                        print(f"Silence counter: {silence_counter}/{SILENCE_THRESHOLD}")
-
-                        # Check if user stopped speaking
-                        if silence_counter >= SILENCE_THRESHOLD:
-                            # Process accumulated audio
-                            audio_data = audio_buffer.getvalue()
-
-                            if len(audio_data) > 0:
-                                # Transcribe the audio
-                                try:
-                                    print(f"🎤 Transcribing {len(audio_data)} bytes of audio...")
-                                    transcript = await stt.transcribe_audio(audio_data)
-
-                                    if transcript and transcript.strip():
-                                        print(f"📝 User said: {transcript}")
-                                        # Send user transcript to frontend
-                                        await websocket.send_json({
-                                            "type": "transcript",
-                                            "speaker": "user",
-                                            "text": transcript
-                                        })
-
-                                        # Add to conversation history
-                                        conversation_history.append({"role": "user", "content": transcript})
-
-                                        # Generate AI response using LLM
-                                        print(f"🤖 Generating AI response...")
-                                        ai_response = await llm.generate_interview_response(
-                                            conversation_history=conversation_history
-                                        )
-
-                                        conversation_history.append({"role": "assistant", "content": ai_response})
-
-                                        print(f"💬 AI response: {ai_response}")
-                                        # Send AI response to frontend
-                                        await websocket.send_json({
-                                            "type": "transcript",
-                                            "speaker": "ai",
-                                            "text": ai_response
-                                        })
-                                    else:
-                                        print(f"⚠️ Empty transcript received")
-
-                                except Exception as e:
-                                    print(f"❌ Error processing audio: {e}")
-                                    import traceback
-                                    traceback.print_exc()
-                                    await websocket.send_json({
-                                        "type": "error",
-                                        "message": "Failed to process audio"
-                                    })
-
-                            # Reset buffer and state
-                            audio_buffer = BytesIO()
-                            is_speaking = False
-                            silence_counter = 0
-
-            elif "text" in data:
-                # Text message (for testing/debugging)
+            if "text" in data:
+                # JSON message received
                 message = json.loads(data["text"])
 
-                if message.get("type") == "user_transcript":
+                if message.get("type") == "audio_complete":
+                    # Frontend is about to send audio blob
+                    print("📥 Audio recording complete, expecting audio blob next...")
+                    expecting_audio = True
+
+                elif message.get("type") == "user_transcript":
                     # Manual transcript input (for testing without STT)
                     user_text = message.get("text", "")
                     conversation_history.append({"role": "user", "content": user_text})
 
                     # Generate AI response
                     ai_response = await llm.generate_interview_response(
-                        conversation_history=conversation_history
+                        conversation_history=conversation_history,
+                        target_language="Chinese"
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
 
-                    # Send AI transcript
+                    # Generate TTS audio for response
+                    print(f"🔊 Generating TTS audio for AI response...")
+                    audio_data = await tts.text_to_speech(ai_response)
+
+                    # Send AI transcript with audio
                     await websocket.send_json({
                         "type": "transcript",
                         "speaker": "ai",
-                        "text": ai_response
+                        "text": ai_response,
+                        "audio": audio_data
                     })
+
+            elif "bytes" in data:
+                # Audio blob received
+                if expecting_audio:
+                    audio_data = data["bytes"]
+                    print(f"🎤 Received audio blob: {len(audio_data)} bytes")
+
+                    try:
+                        # Transcribe the audio
+                        print(f"🎤 Transcribing audio...")
+                        transcript = await stt.transcribe_audio(audio_data, language="Chinese")
+
+                        if transcript and transcript.strip():
+                            print(f"📝 User said: {transcript}")
+                            # Send user transcript to frontend
+                            await websocket.send_json({
+                                "type": "transcript",
+                                "speaker": "user",
+                                "text": transcript
+                            })
+
+                            # Add to conversation history
+                            conversation_history.append({"role": "user", "content": transcript})
+
+                            # Generate AI response using LLM
+                            print(f"🤖 Generating AI response...")
+                            ai_response = await llm.generate_interview_response(
+                                conversation_history=conversation_history,
+                                target_language="Chinese"
+                            )
+
+                            conversation_history.append({"role": "assistant", "content": ai_response})
+
+                            print(f"💬 AI response: {ai_response}")
+
+                            # Generate TTS audio for response
+                            print(f"🔊 Generating TTS audio for AI response...")
+                            audio_data = await tts.text_to_speech(ai_response)
+
+                            # Send AI response with audio to frontend
+                            await websocket.send_json({
+                                "type": "transcript",
+                                "speaker": "ai",
+                                "text": ai_response,
+                                "audio": audio_data
+                            })
+                        else:
+                            print(f"⚠️ Empty transcript received")
+                            await websocket.send_json({
+                                "type": "error",
+                                "message": "Could not transcribe audio. Please try again."
+                            })
+
+                    except Exception as e:
+                        print(f"❌ Error processing audio: {e}")
+                        import traceback
+                        traceback.print_exc()
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": "Failed to process audio"
+                        })
+
+                    expecting_audio = False
+                else:
+                    print("⚠️ Received unexpected audio data (no audio_complete signal)")
 
     except WebSocketDisconnect:
         if interview_id in active_connections:

@@ -5,6 +5,12 @@ Converts text responses to natural-sounding speech for the interviewer agent.
 """
 
 from typing import Optional
+import base64
+from openai import AsyncOpenAI
+from app.core.config import settings
+
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 
 async def text_to_speech(text: str, voice: str = "alloy") -> Optional[str]:
@@ -16,29 +22,31 @@ async def text_to_speech(text: str, voice: str = "alloy") -> Optional[str]:
         voice: Voice to use (for OpenAI TTS: alloy, echo, fable, onyx, nova, shimmer)
 
     Returns:
-        URL to the generated audio file, or None if TTS is disabled/failed
+        Base64-encoded audio data (MP3 format), or None if TTS failed
 
-    TODO: Implement with OpenAI TTS API or ElevenLabs
-
-    Example (OpenAI):
-        from openai import AsyncOpenAI
-        client = AsyncOpenAI()
-
+    Note: Returns base64-encoded audio for WebSocket transmission.
+    Frontend can decode and play using: new Audio(`data:audio/mp3;base64,${audioData}`)
+    """
+    try:
+        # Generate speech using OpenAI TTS
         response = await client.audio.speech.create(
-            model="tts-1",  # or "tts-1-hd" for higher quality
+            model="tts-1",  # Fast, lower latency
             voice=voice,
-            input=text
+            input=text,
+            response_format="mp3"
         )
 
-        # Save to file storage (S3, Supabase Storage, etc.)
+        # Get audio bytes
         audio_bytes = response.content
-        audio_url = await storage.upload_audio(audio_bytes, "interview_audio")
-        return audio_url
-    """
 
-    # STUB: For MVP, you can skip TTS and just use text
-    # Return None to indicate no audio generated
-    return None
+        # Encode as base64 for WebSocket transmission
+        audio_base64 = base64.b64encode(audio_bytes).decode('utf-8')
+
+        return audio_base64
+
+    except Exception as e:
+        print(f"Error generating TTS audio: {e}")
+        return None
 
 
 async def text_to_speech_streaming(text: str, voice: str = "alloy"):

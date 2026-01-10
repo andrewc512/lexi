@@ -21,29 +21,38 @@ client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 # =============================================================================
 
 async def generate_interview_response(
-    conversation_history: List[dict]
+    conversation_history: List[dict],
+    target_language: str
 ) -> str:
     """
     Generate an AI interviewer response based on conversation history.
 
     Args:
         conversation_history: List of {"role": "user"/"assistant", "content": "..."}
+        target_language: The language being assessed (e.g., "Spanish", "French", "Mandarin")
 
     Returns:
         AI interviewer's next question or response
     """
     try:
         # System prompt defining Lexi's personality
-        system_prompt = """You are Lexi, a friendly and professional AI interviewer. Your role is to:
+        system_prompt = f"""You are Lexi, a friendly and encouraging language proficiency assessor specializing in {target_language}. Your role is to:
 
-1. Conduct engaging technical and behavioral interviews
-2. Ask thoughtful follow-up questions based on candidate responses
-3. Keep questions concise and conversational
-4. Be encouraging and create a comfortable atmosphere
-5. Probe for details about technical skills, problem-solving, and experience
-6. Keep your responses under 2-3 sentences
+1. Assess the user's {target_language} language proficiency through natural conversation
+2. Evaluate their speaking ability, grammar, vocabulary, and fluency in {target_language}
+3. Ask natural follow-up questions in {target_language} to assess their skills at different levels
+4. Create a comfortable, low-pressure environment that encourages the user to speak naturally
+5. Adapt your questions based on their proficiency level (simpler if they struggle, more complex if they excel)
+6. Keep your responses under 2-3 sentences to encourage them to speak more
+7. Be supportive and focus on helping them demonstrate their best {target_language} abilities
 
-Remember to be warm, professional, and genuinely interested in the candidate's responses."""
+IMPORTANT LANGUAGE INSTRUCTIONS:
+- Your FIRST message should be in English to welcome them and explain the assessment
+- ALL subsequent messages MUST be in {target_language} only
+- Do not translate or provide English explanations after the first message
+- Immerse them fully in {target_language} to properly assess their proficiency
+
+Remember to be warm, patient, and genuinely interested in helping the user showcase their language proficiency."""
 
         # Build messages with system prompt
         messages = [

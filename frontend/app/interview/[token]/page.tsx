@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { ConsentScreen } from "./components/ConsentScreen";
-import { AudioStream } from "./components/AudioStream";
+import { AudioStream, AudioStreamRef } from "./components/AudioStream";
 import { AIVoice } from "./components/AIVoice";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { Controls } from "./components/Controls";
@@ -23,11 +23,10 @@ export default function InterviewPage({
   params: { token: string };
 }) {
   const [state, setState] = useState<InterviewState>("consent");
-  const [isMuted, setIsMuted] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
-  const [isUserSpeaking, setIsUserSpeaking] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
-  const [wsConnection, setWsConnection] = useState<WebSocket | null>(null);
+  const audioStreamRef = useRef<AudioStreamRef>(null);
 
   const handleConsent = () => {
     setState("interview");
@@ -37,35 +36,65 @@ export default function InterviewPage({
 
   const handleComplete = () => {
     setState("complete");
-    if (wsConnection) {
-      wsConnection.close();
-    }
   };
 
-  const addTranscriptEntry = (speaker: "ai" | "user", text: string) => {
+  const handleStartRecording = () => {
+    audioStreamRef.current?.startRecording();
+  };
+
+  const handleStopRecording = () => {
+    audioStreamRef.current?.stopRecording();
+  };
+
+  const handleUserSpeech = useCallback((text: string) => {
     setTranscript((prev) => [
       ...prev,
       {
         id: crypto.randomUUID(),
-        speaker,
+        speaker: "user" as const,
         text,
         timestamp: new Date(),
       },
     ]);
-  };
+  }, []);
 
-  const handleUserSpeech = (text: string) => {
-    addTranscriptEntry("user", text);
-  };
+  const handleAIResponse = useCallback((text: string, audioData?: string) => {
+    setTranscript((prev) => [
+      ...prev,
+      {
+        id: crypto.randomUUID(),
+        speaker: "ai" as const,
+        text,
+        timestamp: new Date(),
+      },
+    ]);
 
-  const handleAIResponse = (text: string) => {
-    addTranscriptEntry("ai", text);
-    // Trigger AI speaking animation
-    setIsAISpeaking(true);
-    // Simulate AI speaking duration based on text length
-    const speakingDuration = Math.max(2000, text.length * 50); // ~50ms per character
-    setTimeout(() => setIsAISpeaking(false), speakingDuration);
-  };
+    // Play audio if available
+    if (audioData) {
+      console.log("🔊 Playing AI audio");
+      setIsAISpeaking(true);
+      const audio = new Audio(`data:audio/mp3;base64,${audioData}`);
+
+      audio.onended = () => {
+        setIsAISpeaking(false);
+      };
+
+      audio.onerror = (e) => {
+        console.error("Error playing audio:", e);
+        setIsAISpeaking(false);
+      };
+
+      audio.play().catch((e) => {
+        console.error("Failed to play audio:", e);
+        setIsAISpeaking(false);
+      });
+    } else {
+      // Fallback: simulate AI speaking duration based on text length if no audio
+      setIsAISpeaking(true);
+      const speakingDuration = Math.max(2000, text.length * 50); // ~50ms per character
+      setTimeout(() => setIsAISpeaking(false), speakingDuration);
+    }
+  }, []);
 
   // Set up WebSocket message listener
   useEffect(() => {
@@ -77,7 +106,7 @@ export default function InterviewPage({
       const message = event.detail;
       if (message.type === "transcript") {
         if (message.speaker === "ai") {
-          handleAIResponse(message.text);
+          handleAIResponse(message.text, message.audio);
         } else if (message.speaker === "user") {
           // User transcript is already handled in handleUserSpeech
           // but we could add it here for consistency
@@ -122,16 +151,12 @@ export default function InterviewPage({
           <Timer onExpire={handleComplete} />
         </div>
         <div className="flex items-center gap-4">
-          {isUserSpeaking && (
-            <span className="flex items-center gap-2 text-green-400 text-sm font-medium">
-              <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
-              You&apos;re speaking...
+          {isRecording && (
+            <span className="flex items-center gap-2 text-red-500 text-sm font-medium">
+              <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+              Recording...
             </span>
           )}
-          <span className="flex items-center gap-2 text-red-500 text-sm">
-            <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
-            Recording
-          </span>
         </div>
       </header>
 
@@ -169,39 +194,49 @@ export default function InterviewPage({
         <TranscriptPanel transcript={transcript} />
       </main>
 
-      {/* User video preview + Controls */}
-      <footer className="p-4 border-t border-gray-800">
+      {/* Controls */}
+      <footer className="p-6 border-t border-gray-800">
         <div className="flex items-center justify-center gap-4">
-          {/* User preview */}
-          <div className="absolute bottom-24 right-8 w-40 h-28 bg-gray-800 rounded-lg overflow-hidden border-2 border-gray-700">
-            <div className="w-full h-full flex items-center justify-center text-gray-500">
-              <svg className="w-12 h-12" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+          {/* Recording button */}
+          {!isRecording ? (
+            <button
+              onClick={handleStartRecording}
+              disabled={isAISpeaking}
+              className="px-8 py-4 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white rounded-lg font-medium flex items-center gap-3 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
               </svg>
-            </div>
-            {!isMuted && (
-              <div className="absolute bottom-2 left-2 flex items-center gap-0.5">
-                <span className="w-0.5 h-2 bg-green-400 rounded-full animate-pulse" />
-                <span className="w-0.5 h-3 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: "100ms" }} />
-                <span className="w-0.5 h-2 bg-green-400 rounded-full animate-pulse" style={{ animationDelay: "200ms" }} />
-              </div>
-            )}
-          </div>
+              Record Response
+            </button>
+          ) : (
+            <button
+              onClick={handleStopRecording}
+              className="px-8 py-4 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium flex items-center gap-3 transition-colors"
+            >
+              <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                <rect x="6" y="6" width="12" height="12" rx="2" />
+              </svg>
+              Stop Recording
+            </button>
+          )}
 
-          {/* Controls */}
-          <Controls
-            isMuted={isMuted}
-            onToggleMute={() => setIsMuted(!isMuted)}
-            onEndCall={handleComplete}
-          />
+          {/* End Interview button */}
+          <button
+            onClick={handleComplete}
+            className="px-6 py-4 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-medium transition-colors"
+          >
+            End Interview
+          </button>
         </div>
       </footer>
 
       {/* Audio components (invisible) */}
       <AudioStream
-        isMuted={isMuted}
+        ref={audioStreamRef}
         onTranscript={handleUserSpeech}
-        onSpeakingChange={setIsUserSpeaking}
+        onRecordingChange={setIsRecording}
         interviewToken={params.token}
       />
       <AIVoice
