@@ -10,6 +10,61 @@ This service handles all LLM interactions for:
 
 from typing import List, Optional, Dict
 from app.models.session import LanguageExercise, SessionState
+from openai import AsyncOpenAI
+from app.core.config import settings
+
+# Initialize OpenAI client
+client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+
+# =============================================================================
+# INTERVIEW CONVERSATION FUNCTIONS
+# =============================================================================
+
+async def generate_interview_response(
+    conversation_history: List[dict]
+) -> str:
+    """
+    Generate an AI interviewer response based on conversation history.
+
+    Args:
+        conversation_history: List of {"role": "user"/"assistant", "content": "..."}
+
+    Returns:
+        AI interviewer's next question or response
+    """
+    try:
+        # System prompt defining Lexi's personality
+        system_prompt = """You are Lexi, a friendly and professional AI interviewer. Your role is to:
+
+1. Conduct engaging technical and behavioral interviews
+2. Ask thoughtful follow-up questions based on candidate responses
+3. Keep questions concise and conversational
+4. Be encouraging and create a comfortable atmosphere
+5. Probe for details about technical skills, problem-solving, and experience
+6. Keep your responses under 2-3 sentences
+
+Remember to be warm, professional, and genuinely interested in the candidate's responses."""
+
+        # Build messages with system prompt
+        messages = [
+            {"role": "system", "content": system_prompt},
+            *conversation_history
+        ]
+
+        # Generate response using GPT-4
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=150
+        )
+
+        return response.choices[0].message.content.strip()
+
+    except Exception as e:
+        print(f"Error generating interview response: {e}")
+        # Fallback to simple response
+        return "That's interesting. Can you tell me more about that?"
 
 
 # =============================================================================

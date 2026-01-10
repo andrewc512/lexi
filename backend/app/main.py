@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import interviews, ai, email, health, session
+from app.api import interviews, ai, email, health, session, realtime
 from app.core.config import settings
 
 app = FastAPI(
@@ -22,6 +22,7 @@ app.include_router(interviews.router, prefix="/interviews", tags=["interviews"])
 app.include_router(session.router, prefix="/session", tags=["session"])
 app.include_router(ai.router, prefix="/ai", tags=["ai"])
 app.include_router(email.router, prefix="/email", tags=["email"])
+app.include_router(realtime.router, tags=["realtime"])
 
 
 @app.get("/")
