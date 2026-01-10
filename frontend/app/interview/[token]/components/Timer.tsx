@@ -9,6 +9,7 @@ interface TimerProps {
 
 export function Timer({ onExpire }: TimerProps) {
   const [timeLeft, setTimeLeft] = useState(INTERVIEW_DURATION_MINUTES * 60);
+  const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -20,17 +21,29 @@ export function Timer({ onExpire }: TimerProps) {
         }
         return prev - 1;
       });
+      setElapsed((prev) => prev + 1);
     }, 1000);
 
     return () => clearInterval(interval);
   }, [onExpire]);
 
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
+  };
+
+  const isLowTime = timeLeft < 300; // Less than 5 minutes
 
   return (
-    <div className="text-xl font-mono">
-      {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
+    <div className="flex items-center gap-2">
+      <span className={`font-mono text-sm ${isLowTime ? "text-red-400" : "text-gray-400"}`}>
+        {formatTime(elapsed)}
+      </span>
+      <span className="text-gray-600">/</span>
+      <span className="text-gray-500 font-mono text-sm">
+        {formatTime(INTERVIEW_DURATION_MINUTES * 60)}
+      </span>
     </div>
   );
 }
