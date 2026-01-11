@@ -1,17 +1,64 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { SUPPORTED_LANGUAGES } from "@/types/language";
 import { TypingAnimation } from "./components/TypingAnimation";
 
 const LANGUAGE_FLAGS: Record<string, string> = {
   en: "🇺🇸",
+  "zh-cn": "🇨🇳",
+  hi: "🇮🇳",
   es: "🇪🇸",
+  ar: "🇸🇦",
   fr: "🇫🇷",
+  bn: "🇧🇩",
+  pt: "🇵🇹",
+  ru: "🇷🇺",
+  ur: "🇵🇰",
+  id: "🇮🇩",
   de: "🇩🇪",
-  zh: "🇨🇳",
   ja: "🇯🇵",
+  pcm: "🇳🇬",
+  "ar-eg": "🇪🇬",
+  mr: "🇮🇳",
+  vi: "🇻🇳",
+  te: "🇮🇳",
+  pa: "🇵🇰",
+  wuu: "🇨🇳",
+  ko: "🇰🇷",
+  sw: "🇹🇿",
+  ha: "🇳🇬",
+  ta: "🇮🇳",
+  it: "🇮🇹",
 };
 
 export default function HomePage() {
+  const pageSize = 6; // show 6 at a time
+  const pages = useMemo(() => {
+    const chunks: typeof SUPPORTED_LANGUAGES[] = [] as any;
+    for (let i = 0; i < SUPPORTED_LANGUAGES.length; i += pageSize) {
+      chunks.push(SUPPORTED_LANGUAGES.slice(i, i + pageSize));
+    }
+    // if last chunk has less than pageSize, wrap around from start so we always have a full page
+    if (chunks.length && chunks[chunks.length - 1].length < pageSize) {
+      const last = chunks[chunks.length - 1];
+      const needed = pageSize - last.length;
+      const extra = SUPPORTED_LANGUAGES.slice(0, needed);
+      chunks[chunks.length - 1] = last.concat(extra);
+    }
+    return chunks;
+  }, []);
+
+  const [pageIndex, setPageIndex] = useState(0);
+
+  useEffect(() => {
+    if (!pages || pages.length <= 1) return;
+    const id = setInterval(() => {
+      setPageIndex((p) => (p + 1) % pages.length);
+    }, 3500);
+    return () => clearInterval(id);
+  }, [pages]);
   return (
     <div className="min-h-screen bg-white">
       {/* Navigation Header */}
@@ -110,19 +157,51 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Languages Supported */}
+        {/* Languages Supported - Carousel (6 at a time) */}
         <div className="mt-24 pt-16 pb-16 border-t border-gray-200">
           <div className="text-center space-y-6">
             <h2 className="text-3xl md:text-4xl text-gray-900">Languages Supported</h2>
-            <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 text-lg text-gray-700">
-              {SUPPORTED_LANGUAGES.map((lang, index) => (
-                <span key={lang.code} className="font-medium flex items-center gap-2">
-                  <span className="text-2xl">{LANGUAGE_FLAGS[lang.code]}</span>
-                  {lang.name}
-                  {index < SUPPORTED_LANGUAGES.length - 1 && (
-                    <span className="mx-3 text-gray-400">•</span>
-                  )}
-                </span>
+
+            <div className="w-full max-w-4xl mx-auto overflow-hidden">
+              <div
+                className="flex transition-transform duration-700 ease-in-out"
+                style={{
+                  width: `${pages.length * 100}%`,
+                  transform: `translateX(-${pageIndex * (100 / pages.length)}%)`,
+                }}
+              >
+                {pages.map((page, pi) => (
+                  <div
+                    key={pi}
+                    className="flex-shrink-0 px-4"
+                    style={{ width: `${100 / pages.length}%` }}
+                  >
+                    <div className="grid grid-cols-3 gap-6 justify-center items-center text-lg text-gray-700">
+                      {page.map((lang) => (
+                        <div key={lang.code} className="font-medium flex items-center gap-3 justify-center">
+                          <span className="text-2xl">{LANGUAGE_FLAGS[lang.code] ?? "🌐"}</span>
+                          <div className="text-left">
+                            <div>{lang.name}</div>
+                            <div className="text-sm text-gray-500">{lang.nativeName}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex justify-center gap-2 mt-6">
+              {pages.map((_, i) => (
+                <button
+                  key={i}
+                  onClick={() => setPageIndex(i)}
+                  className={`rounded-full transition-all ${
+                    i === pageIndex ? "bg-blue-600 w-8 h-2" : "bg-gray-300 w-2 h-2"
+                  }`}
+                  aria-label={`Go to page ${i + 1}`}
+                />
               ))}
             </div>
           </div>
