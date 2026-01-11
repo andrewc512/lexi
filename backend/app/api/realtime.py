@@ -96,6 +96,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     ai_response = await llm.generate_interview_response(
                         conversation_history=conversation_history,
                         target_language="Korean"
+                        target_language="Spanish"
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
@@ -122,6 +123,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                         # Transcribe the audio
                         print(f"🎤 Transcribing audio...")
                         transcript = await stt.transcribe_audio(audio_data, language="Korean")
+                        transcript = await stt.transcribe_audio(audio_data, language="Spanish")
 
                         if transcript and transcript.strip():
                             print(f"📝 User said: {transcript}")
@@ -256,6 +258,12 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                     conversation_history=conversation_history,
                                     target_language="Korean"
                                 )
+                            # Generate AI response using LLM
+                            print(f"🤖 Generating AI response...")
+                            ai_response = await llm.generate_interview_response(
+                                conversation_history=conversation_history,
+                                target_language="Spanish"
+                            )
 
                                 conversation_history.append({"role": "assistant", "content": ai_response})
 
