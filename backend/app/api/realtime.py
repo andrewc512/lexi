@@ -238,8 +238,18 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                             "total_evaluations": len(reading_evaluations)
                                         })
 
-                                        # End the interview
-                                        break
+                                        # Wait a moment for the message to be sent
+                                        await asyncio.sleep(0.5)
+
+                                        # Clean up and close the connection
+                                        if interview_id in active_connections:
+                                            del active_connections[interview_id]
+
+                                        print(f"✅ Interview {interview_id} completed successfully")
+
+                                        # Close the WebSocket connection
+                                        await websocket.close()
+                                        return
 
                                     # Send evaluation feedback
                                     feedback_msg = (
