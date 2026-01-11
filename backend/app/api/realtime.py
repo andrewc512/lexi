@@ -53,6 +53,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     # Reading assessment state
     interview_start_time = time.time()
     in_reading_phase = False
+    reading_start_time: Optional[float] = None
     current_reading_passage: Optional[str] = None
     reading_evaluations: List[dict] = []
     reading_difficulty = 3  # Start at moderate difficulty
@@ -160,8 +161,9 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             if not in_reading_phase and reading_manager.should_transition_to_reading(
                                 interview_start_time
                             ):
-                                print(f"⏰ 3 minutes elapsed - transitioning to reading phase")
+                                print(f"⏰ 1 minute elapsed - transitioning to reading phase")
                                 in_reading_phase = True
+                                reading_start_time = time.time()
 
                                 # Send transition message
                                 transition_msg = reading_manager.get_transition_message(settings.DEFAULT_TARGET_LANGUAGE)
@@ -208,6 +210,36 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                     )
 
                                     reading_evaluations.append(evaluation)
+
+                                    # Check if reading phase should end
+                                    if reading_start_time and reading_manager.should_end_reading(reading_start_time):
+                                        print(f"⏰ Reading phase complete (1:30 elapsed)")
+
+                                        # Calculate final reading proficiency
+                                        reading_proficiency = reading_manager.calculate_reading_proficiency(
+                                            reading_evaluations
+                                        )
+
+                                        # Send completion message
+                                        completion_msg = (
+                                            f"Great work! You've completed the assessment. "
+                                            f"Your reading level is {reading_proficiency['reading_level']}. "
+                                            f"Thank you for participating!"
+                                        )
+
+                                        audio_data = await tts.text_to_speech(completion_msg)
+
+                                        await websocket.send_json({
+                                            "type": "assessment_complete",
+                                            "speaker": "ai",
+                                            "text": completion_msg,
+                                            "audio": audio_data,
+                                            "reading_proficiency": reading_proficiency,
+                                            "total_evaluations": len(reading_evaluations)
+                                        })
+
+                                        # End the interview
+                                        break
 
                                     # Send evaluation feedback
                                     feedback_msg = (
