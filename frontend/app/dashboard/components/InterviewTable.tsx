@@ -23,6 +23,18 @@ interface InterviewRow {
   summary_eval?: string | null;
 }
 
+const getLanguageFlag = (languageCode: string | null | undefined): string => {
+  const flagMap: Record<string, string> = {
+    en: "🇺🇸",
+    es: "🇪🇸",
+    fr: "🇫🇷",
+    de: "🇩🇪",
+    zh: "🇨🇳",
+    ja: "🇯🇵",
+  };
+  return languageCode ? flagMap[languageCode] || "" : "";
+};
+
 export function InterviewTable({ onSelectInterview, refreshTrigger }: InterviewTableProps) {
   const [interviews, setInterviews] = useState<Interview[]>([]);
   const [interviewRows, setInterviewRows] = useState<InterviewRow[]>([]);
@@ -118,19 +130,21 @@ export function InterviewTable({ onSelectInterview, refreshTrigger }: InterviewT
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-xl font-semibold mb-4">Interviews</h2>
+    <div className="bg-white rounded-lg shadow">
+      <div className="p-6 pb-4">
+        <h2 className="text-xl font-semibold">Interviews</h2>
+      </div>
       {interviews.length === 0 ? (
-        <p className="text-gray-500">No interviews yet. Create one using the form on the left.</p>
+        <div className="p-6 pt-0">
+          <p className="text-gray-500">No interviews yet. Create one using the form on the left.</p>
+        </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full table-auto">
+        <div className="overflow-x-auto -mx-6 px-6">
+          <table className="w-full table-auto" style={{ minWidth: '800px' }}>
             <thead>
               <tr className="border-b bg-gray-50">
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Candidate</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Email</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Language</th>
-                <th className="text-left py-3 px-4 font-medium text-gray-700">Status</th>
+                <th className="text-left py-3 px-4 font-medium text-gray-700 w-[160px]">Status</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Score</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
                 <th className="text-left py-3 px-4 font-medium text-gray-700">Actions</th>
@@ -142,11 +156,18 @@ export function InterviewTable({ onSelectInterview, refreshTrigger }: InterviewT
                 const interview = interviews.find((i) => i.id === row.id);
                 return (
                   <tr key={row.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">{row.name}</td>
-                    <td className="py-3 px-4">{row.email}</td>
-                    <td className="py-3 px-4">{row.language || "-"}</td>
                     <td className="py-3 px-4">
-                      <span className="px-2 py-1 text-xs rounded bg-gray-100">
+                      <div className="font-semibold">{row.name}</div>
+                      <div className="text-sm text-gray-500">{row.email}</div>
+                      <div className="text-sm text-gray-400 mt-0.5 flex items-center gap-1.5">
+                        {row.language && getLanguageFlag(row.language) && (
+                          <span>{getLanguageFlag(row.language)}</span>
+                        )}
+                        <span>{row.language || "-"}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 w-[160px]">
+                      <span className="px-2 py-1 text-xs rounded bg-gray-100 whitespace-nowrap">
                         {row.status || "pending"}
                       </span>
                     </td>

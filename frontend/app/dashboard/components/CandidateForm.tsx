@@ -21,6 +21,13 @@ export function CandidateForm({ onInterviewCreated }: CandidateFormProps) {
     setError(null);
 
     try {
+      // Get the current authenticated user
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      
+      if (userError || !user) {
+        throw new Error("You must be logged in to create an interview");
+      }
+
       console.log("Submitting interview:", { email, name });
       
       // Insert into Supabase - only fields that exist in the table
@@ -33,6 +40,7 @@ export function CandidateForm({ onInterviewCreated }: CandidateFormProps) {
             name: name,
             language: language,
             status: "Email not sent",
+            user_id: user.id,
           },
         ])
         .select()
