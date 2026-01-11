@@ -40,14 +40,21 @@ User Audio/Text → API → Agent → LLM (Evaluate) → Next Exercise → User
 
 ## Quick Start
 
-### 1. Install Dependencies
+### 1. Create Virtual Environment
 
 ```bash
 cd backend
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
+
+### 2. Install Dependencies
+
+```bash
 pip install -r requirements.txt
 ```
 
-### 2. Set Environment Variables
+### 3. Set Environment Variables
 
 Create `.env` file:
 
@@ -66,14 +73,14 @@ ANTHROPIC_API_KEY=your_anthropic_key
 CORS_ORIGINS=http://localhost:3000,http://localhost:3001
 ```
 
-### 3. Run Database Migrations
+### 4. Run Database Migrations
 
 ```bash
 # Copy the SQL from database/migrations/001_create_session_states.sql
 # Paste into Supabase SQL Editor and run
 ```
 
-### 4. Start Server
+### 5. Start Server
 
 ```bash
 uvicorn app.main:app --reload
