@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     # LLM
     OPENAI_API_KEY: str = ""
 
+    # Language Settings
+    DEFAULT_TARGET_LANGUAGE: str = "Spanish"  # Change this to switch all language assessments globally
+
     # Email
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
