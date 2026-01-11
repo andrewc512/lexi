@@ -26,6 +26,7 @@ class ReadingAssessmentManager:
 
     # Duration constants (in seconds)
     CONVERSATION_DURATION = 60  # 1 minute (for testing)
+    READING_DURATION = 90  # 1:30 minutes (for testing)
 
     def __init__(self):
         """Initialize the reading assessment manager."""
@@ -44,13 +45,34 @@ class ReadingAssessmentManager:
             current_time: Current timestamp (defaults to now)
 
         Returns:
-            True if 3 minutes have elapsed, False otherwise
+            True if conversation duration has elapsed, False otherwise
         """
         if current_time is None:
             current_time = time.time()
 
         elapsed = current_time - start_time
         return elapsed >= self.CONVERSATION_DURATION
+
+    def should_end_reading(
+        self,
+        reading_start_time: float,
+        current_time: Optional[float] = None
+    ) -> bool:
+        """
+        Check if the reading phase should end.
+
+        Args:
+            reading_start_time: Reading phase start timestamp (unix timestamp)
+            current_time: Current timestamp (defaults to now)
+
+        Returns:
+            True if reading duration has elapsed, False otherwise
+        """
+        if current_time is None:
+            current_time = time.time()
+
+        elapsed = current_time - reading_start_time
+        return elapsed >= self.READING_DURATION
 
     def get_transition_message(self, target_language: str) -> str:
         """
