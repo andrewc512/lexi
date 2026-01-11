@@ -98,7 +98,7 @@ class ReadingAssessmentManager:
         previous_passages: Optional[List[str]] = None
     ) -> Dict[str, str]:
         """
-        Generate a single sentencein the target language.
+        Generate a single sentence in the target language.
 
         Args:
             target_language: Language for the passage
