@@ -21,11 +21,12 @@ class Settings(BaseSettings):
     # Language Settings
     DEFAULT_TARGET_LANGUAGE: str = "Spanish"  # Change this to switch all language assessments globally
 
-    # Email
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USER: str = ""
-    SMTP_PASSWORD: str = ""
+    # Email - SendGrid
+    SENDGRID_API_KEY: str = ""
+    SENDGRID_FROM_EMAIL: str = ""
+    
+    # Frontend URL (for interview links in emails)
+    FRONTEND_URL: str = "http://localhost:3000"
 
     class Config:
         env_file = ".env"

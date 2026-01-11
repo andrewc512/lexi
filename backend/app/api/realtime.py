@@ -21,6 +21,7 @@ import time
 
 from app.services import stt, llm, tts
 from app.services.reading_assessment import reading_manager
+from app.services.supabase import get_interview_by_id, update_interview_status, update_interview_evaluation
 from app.core.config import settings
 
 router = APIRouter()
@@ -28,6 +29,147 @@ router = APIRouter()
 # Store active connections and their conversation state
 active_connections: dict[str, WebSocket] = {}
 conversation_states: dict[str, dict] = {}
+
+
+def _generate_performance_summary(
+    grammar_score: float,
+    fluency_score: float,
+    speaking_count: int,
+    reading_count: int,
+    proficiency_level: str = None
+) -> str:
+    """Generate a human-readable performance summary based on scores."""
+    
+    # Determine performance levels
+    def get_level(score):
+        if score is None:
+            return None
+        if score >= 90:
+            return "excellent"
+        elif score >= 75:
+            return "strong"
+        elif score >= 60:
+            return "moderate"
+        elif score >= 40:
+            return "developing"
+        else:
+            return "beginning"
+    
+    grammar_level = get_level(grammar_score)
+    fluency_level = get_level(fluency_score)
+    
+    # Build summary
+    parts = []
+    
+    # Overall impression
+    avg_score = ((grammar_score or 0) + (fluency_score or 0)) / 2 if grammar_score or fluency_score else 0
+    if avg_score >= 85:
+        parts.append("The candidate demonstrated strong language proficiency throughout the assessment.")
+    elif avg_score >= 70:
+        parts.append("The candidate showed solid language skills with room for improvement.")
+    elif avg_score >= 50:
+        parts.append("The candidate displayed developing language abilities with notable areas for growth.")
+    else:
+        parts.append("The candidate is at an early stage of language development.")
+    
+    # Grammar feedback
+    if grammar_level:
+        grammar_feedback = {
+            "excellent": "Grammar usage was nearly flawless with sophisticated sentence structures.",
+            "strong": "Grammar was generally accurate with minor errors.",
+            "moderate": "Grammar showed basic competency with some recurring errors.",
+            "developing": "Grammar needs improvement, with frequent errors in sentence structure.",
+            "beginning": "Grammar fundamentals require significant practice."
+        }
+        parts.append(grammar_feedback[grammar_level])
+    
+    # Fluency feedback
+    if fluency_level:
+        fluency_feedback = {
+            "excellent": "Speech was natural and confident with excellent flow.",
+            "strong": "Communication was clear and relatively smooth.",
+            "moderate": "Fluency was adequate but with some hesitation.",
+            "developing": "Speech flow was choppy with noticeable pauses.",
+            "beginning": "Fluency is limited and requires more practice."
+        }
+        parts.append(fluency_feedback[fluency_level])
+    
+    # Add proficiency level if available
+    if proficiency_level:
+        parts.append(f"Estimated CEFR level: {proficiency_level}.")
+    
+    # Exercise summary
+    total = speaking_count + reading_count
+    if total > 0:
+        parts.append(f"Completed {total} exercise{'s' if total > 1 else ''} ({speaking_count} speaking, {reading_count} reading).")
+    
+    return " ".join(parts)
+
+
+async def _save_partial_evaluation(
+    interview_id: str,
+    speaking_evaluations: list,
+    reading_evaluations: list,
+    reading_manager,
+    _unused_msg: str = None  # Kept for compatibility, not used
+):
+    """Save evaluation data from whatever exercises were completed."""
+    if not speaking_evaluations and not reading_evaluations:
+        print(f"No evaluations to save for interview {interview_id}")
+        return
+    
+    # Calculate speaking scores
+    grammar_scores = []
+    fluency_scores = []
+    
+    for eval in speaking_evaluations:
+        if eval.get("grammar_score") is not None:
+            grammar_scores.append(eval["grammar_score"])
+        if eval.get("fluency_score") is not None:
+            fluency_scores.append(eval["fluency_score"])
+    
+    # Calculate reading proficiency if available
+    reading_proficiency = {}
+    if reading_evaluations:
+        reading_proficiency = reading_manager.calculate_reading_proficiency(reading_evaluations)
+        print(f"📊 Final Reading Proficiency: {reading_proficiency}")
+    
+    # Combine scores
+    avg_grammar = sum(grammar_scores) / len(grammar_scores) if grammar_scores else None
+    avg_fluency = sum(fluency_scores) / len(fluency_scores) if fluency_scores else None
+    
+    # Use reading scores if available, otherwise use speaking scores
+    final_grammar = reading_proficiency.get("grammar_score") or avg_grammar
+    final_fluency = reading_proficiency.get("fluency_score") or avg_fluency
+    
+    # Calculate overall score (average of grammar and fluency, scaled to 100)
+    scores = [s for s in [final_grammar, final_fluency] if s is not None]
+    overall_score = (sum(scores) / len(scores)) * 10 if scores else 0  # Scale from 0-10 to 0-100
+    
+    # Generate meaningful feedback summary
+    feedback = _generate_performance_summary(
+        grammar_score=overall_score if final_grammar else None,  # Use scaled score
+        fluency_score=(final_fluency * 10) if final_fluency else None,  # Scale to 100
+        speaking_count=len(speaking_evaluations),
+        reading_count=len(reading_evaluations),
+        proficiency_level=reading_proficiency.get("proficiency_level")
+    )
+    
+    evaluation_data = {
+        "overall_score": round(overall_score, 1),
+        "grammar_score": round(final_grammar, 1) if final_grammar else None,
+        "fluency_score": round(final_fluency, 1) if final_fluency else None,
+        "proficiency_level": reading_proficiency.get("proficiency_level"),
+        "reading_level": reading_proficiency.get("reading_level"),
+        "feedback": feedback,
+        "speaking_exercises": len(speaking_evaluations),
+        "reading_exercises": len(reading_evaluations),
+        "total_exercises": len(speaking_evaluations) + len(reading_evaluations),
+        "completed": False
+    }
+    
+    await update_interview_evaluation(interview_id, evaluation_data)
+    print(f"📊 Saved partial evaluation for interview {interview_id}")
 
 
 @router.websocket("/ws/interview/{interview_id}")
@@ -46,6 +188,22 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     active_connections[interview_id] = websocket
     print(f"✅ WebSocket connected for interview: {interview_id}")
 
+    # Fetch interview details from Supabase to get the language
+    interview_data = await get_interview_by_id(interview_id)
+    
+    if interview_data:
+        target_language = interview_data.get("language_name", settings.DEFAULT_TARGET_LANGUAGE)
+        candidate_name = interview_data.get("name", "there")
+        print(f"📋 Interview loaded: {candidate_name}, Language: {target_language}")
+        
+        # Update interview status to in_progress
+        await update_interview_status(interview_id, "in_progress")
+    else:
+        # Fallback to default if interview not found
+        target_language = settings.DEFAULT_TARGET_LANGUAGE
+        candidate_name = "there"
+        print(f"⚠️ Interview {interview_id} not found in database, using default language: {target_language}")
+
     # Initialize conversation state for this interview
     conversation_history: List[dict] = []
     expecting_audio = False
@@ -56,11 +214,12 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     reading_start_time: Optional[float] = None
     current_reading_passage: Optional[str] = None
     reading_evaluations: List[dict] = []
+    speaking_evaluations: List[dict] = []  # Track speaking evaluations
     reading_difficulty = 3  # Start at moderate difficulty
 
     try:
         # Send initial AI greeting
-        greeting = "Hello! Thank you for joining. Let's begin the interview. Tell me a bit about yourself and your background."
+        greeting = f"Hello {candidate_name}! Thank you for joining. Let's begin the {target_language} language assessment. Tell me a bit about yourself and your background."
 
         # Generate TTS audio for greeting
         print(f"🔊 Generating TTS audio for greeting...")
@@ -97,7 +256,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     # Generate AI response
                     ai_response = await llm.generate_interview_response(
                         conversation_history=conversation_history,
-                        target_language=settings.DEFAULT_TARGET_LANGUAGE
+                        target_language=target_language
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
@@ -123,7 +282,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     try:
                         # Transcribe the audio
                         print(f"🎤 Transcribing audio...")
-                        transcript = await stt.transcribe_audio(audio_data, language=settings.DEFAULT_TARGET_LANGUAGE)
+                        transcript = await stt.transcribe_audio(audio_data, language=target_language)
 
                         if transcript and transcript.strip():
                             print(f"📝 User said: {transcript}")
@@ -132,7 +291,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             print(f"📊 Evaluating speech...")
                             evaluation = await llm.evaluate_speaking_exercise(
                                 transcript=transcript,
-                                target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                target_language=target_language,
                                 difficulty_level=3
                             )
                             print(f"")
@@ -146,6 +305,9 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             print(f"Strengths: {evaluation['strengths']}")
                             print(f"{'='*50}")
                             print(f"")
+                            
+                            # Track speaking evaluation
+                            speaking_evaluations.append(evaluation)
                             
                             # Send user transcript to frontend
                             await websocket.send_json({
@@ -166,7 +328,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 reading_start_time = time.time()
 
                                 # Send transition message
-                                transition_msg = reading_manager.get_transition_message(settings.DEFAULT_TARGET_LANGUAGE)
+                                transition_msg = reading_manager.get_transition_message(target_language)
                                 conversation_history.append({"role": "assistant", "content": transition_msg})
 
                                 # Generate TTS for transition
@@ -182,7 +344,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
 
                                 # Generate first reading passage
                                 passage_data = await reading_manager.generate_reading_passage(
-                                    target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                    target_language=target_language,
                                     difficulty_level=reading_difficulty
                                 )
 
@@ -192,7 +354,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 await websocket.send_json({
                                     "type": "reading_passage",
                                     "passage": current_reading_passage,
-                                    "language": settings.DEFAULT_TARGET_LANGUAGE,
+                                    "language": target_language,
                                     "difficulty": reading_difficulty,
                                     "instruction": "Please read this text and translate it to English."
                                 })
@@ -205,7 +367,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                     evaluation = await reading_manager.evaluate_reading_translation(
                                         original_passage=current_reading_passage,
                                         user_translation=transcript,
-                                        target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                        target_language=target_language,
                                         difficulty_level=reading_difficulty
                                     )
 
@@ -219,6 +381,43 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                         reading_proficiency = reading_manager.calculate_reading_proficiency(
                                             reading_evaluations
                                         )
+
+                                        # Calculate combined scores from speaking + reading
+                                        speaking_grammar = [e.get("grammar_score", 0) for e in speaking_evaluations if e.get("grammar_score")]
+                                        speaking_fluency = [e.get("fluency_score", 0) for e in speaking_evaluations if e.get("fluency_score")]
+                                        
+                                        avg_grammar = sum(speaking_grammar) / len(speaking_grammar) if speaking_grammar else None
+                                        avg_fluency = sum(speaking_fluency) / len(speaking_fluency) if speaking_fluency else None
+                                        
+                                        final_grammar = reading_proficiency.get("grammar_score") or avg_grammar
+                                        final_fluency = reading_proficiency.get("fluency_score") or avg_fluency
+                                        
+                                        scores = [s for s in [final_grammar, final_fluency] if s is not None]
+                                        overall_score = (sum(scores) / len(scores)) * 10 if scores else reading_proficiency.get("overall_score", 0)
+                                        
+                                        # Generate meaningful feedback
+                                        feedback = _generate_performance_summary(
+                                            grammar_score=overall_score,
+                                            fluency_score=(final_fluency * 10) if final_fluency else None,
+                                            speaking_count=len(speaking_evaluations),
+                                            reading_count=len(reading_evaluations),
+                                            proficiency_level=reading_proficiency.get("proficiency_level")
+                                        )
+
+                                        # Save evaluation to Supabase
+                                        evaluation_data = {
+                                            "overall_score": round(overall_score, 1),
+                                            "grammar_score": round(final_grammar, 1) if final_grammar else None,
+                                            "fluency_score": round(final_fluency, 1) if final_fluency else None,
+                                            "proficiency_level": reading_proficiency.get("proficiency_level"),
+                                            "reading_level": reading_proficiency.get("reading_level"),
+                                            "feedback": feedback,
+                                            "speaking_exercises": len(speaking_evaluations),
+                                            "reading_exercises": len(reading_evaluations),
+                                            "total_exercises": len(speaking_evaluations) + len(reading_evaluations),
+                                            "completed": True
+                                        }
+                                        await update_interview_evaluation(interview_id, evaluation_data)
 
                                         # Send completion message
                                         completion_msg = (
@@ -276,7 +475,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                         reading_difficulty = max(1, reading_difficulty - 1)
 
                                     passage_data = await reading_manager.generate_reading_passage(
-                                        target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                        target_language=target_language,
                                         difficulty_level=reading_difficulty,
                                         previous_passages=[current_reading_passage]
                                     )
@@ -286,7 +485,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                     await websocket.send_json({
                                         "type": "reading_passage",
                                         "passage": current_reading_passage,
-                                        "language": settings.DEFAULT_TARGET_LANGUAGE,
+                                        "language": target_language,
                                         "difficulty": reading_difficulty,
                                         "instruction": "Here's the next passage. Please translate it to English."
                                     })
@@ -297,7 +496,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 print(f"🤖 Generating AI response...")
                                 ai_response = await llm.generate_interview_response(
                                     conversation_history=conversation_history,
-                                    target_language=settings.DEFAULT_TARGET_LANGUAGE
+                                    target_language=target_language
                                 )
 
                                 conversation_history.append({"role": "assistant", "content": ai_response})
@@ -339,20 +538,23 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
         if interview_id in active_connections:
             del active_connections[interview_id]
 
-        # Calculate final reading proficiency if reading phase was completed
-        if reading_evaluations:
-            reading_proficiency = reading_manager.calculate_reading_proficiency(
-                reading_evaluations
-            )
-            print(f"📊 Final Reading Proficiency: {reading_proficiency}")
-            # TODO: Save reading proficiency to database
+        # Save evaluation data if any exercises were completed
+        await _save_partial_evaluation(
+            interview_id, speaking_evaluations, reading_evaluations, 
+            reading_manager, "Interview disconnected."
+        )
 
-        # TODO: Save conversation to database
         print(f"Interview {interview_id} disconnected")
     except Exception as e:
         print(f"Error in WebSocket: {e}")
         if interview_id in active_connections:
             del active_connections[interview_id]
+        
+        # Save evaluation data even on error
+        await _save_partial_evaluation(
+            interview_id, speaking_evaluations, reading_evaluations,
+            reading_manager, f"Interview ended with error: {str(e)}"
+        )
 
 
 @router.get("/ws/test")
@@ -374,9 +576,13 @@ async def force_reading_phase(interview_id: str):
 
     websocket = active_connections[interview_id]
 
+    # Get interview language from database
+    interview_data = await get_interview_by_id(interview_id)
+    target_language = interview_data.get("language_name", settings.DEFAULT_TARGET_LANGUAGE) if interview_data else settings.DEFAULT_TARGET_LANGUAGE
+
     try:
         # Send transition message
-        transition_msg = reading_manager.get_transition_message(settings.DEFAULT_TARGET_LANGUAGE)
+        transition_msg = reading_manager.get_transition_message(target_language)
         audio_data = await tts.text_to_speech(transition_msg)
 
         await websocket.send_json({
@@ -389,19 +595,19 @@ async def force_reading_phase(interview_id: str):
 
         # Generate first reading passage
         passage_data = await reading_manager.generate_reading_passage(
-            target_language="Korean",
+            target_language=target_language,
             difficulty_level=3
         )
 
         await websocket.send_json({
             "type": "reading_passage",
             "passage": passage_data["passage"],
-            "language": "Korean",
+            "language": target_language,
             "difficulty": 3,
             "instruction": "Please read this text and translate it to English."
         })
 
-        return {"status": "Reading phase initiated", "interview_id": interview_id}
+        return {"status": "Reading phase initiated", "interview_id": interview_id, "language": target_language}
 
     except Exception as e:
         print(f"Error forcing reading phase: {e}")

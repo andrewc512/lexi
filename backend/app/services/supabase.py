@@ -155,19 +155,155 @@ async def store_final_evaluation(assessment_id: str, proficiency: dict) -> Optio
 
 
 # =============================================================================
-# LEGACY INTERVIEW OPERATIONS (Keep for backwards compatibility)
+# INTERVIEW OPERATIONS
 # =============================================================================
 
-async def insert_interview(data: dict) -> dict:
-    """Insert new interview record."""
-    pass
+# Language code to full name mapping
+LANGUAGE_CODE_TO_NAME = {
+    "en": "English",
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "pt": "Portuguese",
+    "it": "Italian",
+    "ru": "Russian",
+    "ar": "Arabic",
+}
 
 
-async def get_interview_by_id(interview_id: str) -> dict:
-    """Get interview by ID."""
-    pass
+def get_language_name(code: str) -> str:
+    """Convert language code to full name."""
+    return LANGUAGE_CODE_TO_NAME.get(code, code.capitalize())
 
 
-async def update_interview_status(interview_id: str, status: str) -> dict:
-    """Update interview status."""
-    pass
+async def get_interview_by_id(interview_id: str) -> Optional[dict]:
+    """
+    Get interview by ID.
+    
+    Args:
+        interview_id: The interview UUID
+        
+    Returns:
+        Interview data dict with fields:
+        - id, name, email, language, status, user_id, created_at
+        - language_name: Full language name (e.g., "Spanish" instead of "es")
+    """
+    client = get_supabase()
+    if not client:
+        print("Supabase client not available")
+        return None
+    
+    try:
+        response = client.table("interviews").select("*").eq(
+            "id", interview_id
+        ).single().execute()
+        
+        if response.data:
+            # Add full language name
+            data = response.data
+            language_code = data.get("language", "en")
+            data["language_name"] = get_language_name(language_code)
+            return data
+        return None
+    except Exception as e:
+        print(f"Error getting interview by ID: {e}")
+        return None
+
+
+async def update_interview_status(interview_id: str, status: str) -> Optional[dict]:
+    """
+    Update interview status.
+    
+    Args:
+        interview_id: The interview UUID
+        status: New status (e.g., "in_progress", "completed", "Email sent")
+        
+    Returns:
+        Updated interview data or None
+    """
+    client = get_supabase()
+    if not client:
+        print("Supabase client not available")
+        return None
+    
+    try:
+        response = client.table("interviews").update({
+            "status": status
+        }).eq("id", interview_id).execute()
+        
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"Error updating interview status: {e}")
+        return None
+
+
+async def insert_interview(data: dict) -> Optional[dict]:
+    """
+    Insert new interview record.
+    
+    Args:
+        data: Interview data (name, email, language, user_id)
+        
+    Returns:
+        Created interview data or None
+    """
+    client = get_supabase()
+    if not client:
+        print("Supabase client not available")
+        return None
+    
+    try:
+        response = client.table("interviews").insert(data).execute()
+        return response.data[0] if response.data else None
+    except Exception as e:
+        print(f"Error inserting interview: {e}")
+        return None
+
+
+async def update_interview_evaluation(interview_id: str, evaluation: dict) -> Optional[dict]:
+    """
+    Store evaluation data for a completed interview.
+    
+    Args:
+        interview_id: The interview UUID
+        evaluation: Evaluation data dict containing:
+            - overall_score: Percentage score (0-100)
+            - grammar_score: Grammar proficiency (0-10)
+            - fluency_score: Fluency proficiency (0-10)
+            - proficiency_level: CEFR level (A1-C2)
+            - reading_level: Reading proficiency level
+            - feedback: Summary feedback text
+            - total_exercises: Number of exercises completed
+            
+    Returns:
+        Updated interview data or None
+    """
+    client = get_supabase()
+    if not client:
+        print("Supabase client not available, skipping evaluation storage")
+        return None
+    
+    try:
+        from datetime import datetime
+        
+        # Add timestamp to evaluation
+        evaluation_with_timestamp = {
+            **evaluation,
+            "evaluated_at": datetime.utcnow().isoformat() + "Z"
+        }
+        
+        response = client.table("interviews").update({
+            "evaluation": evaluation_with_timestamp,
+            "status": "completed"
+        }).eq("id", interview_id).execute()
+        
+        if response.data:
+            print(f"✅ Evaluation saved for interview {interview_id}")
+            return response.data[0]
+        return None
+    except Exception as e:
+        print(f"Error storing interview evaluation: {e}")
+        return None
