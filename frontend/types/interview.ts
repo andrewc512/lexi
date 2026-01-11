@@ -1,4 +1,4 @@
-export type InterviewStatus = "pending" | "in_progress" | "completed" | "expired";
+export type InterviewStatus = "pending" | "Email not sent" | "interview link generated" | "in_progress" | "completed" | "expired";
 
 export interface Interview {
   id: string;

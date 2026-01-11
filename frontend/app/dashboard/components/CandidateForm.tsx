@@ -1,24 +1,71 @@
 "use client";
 
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { supabase } from "@/lib/supabaseClient";
+import { SUPPORTED_LANGUAGES, SupportedLanguage } from "@/types/language";
 
-export function CandidateForm() {
+interface CandidateFormProps {
+  onInterviewCreated?: () => void;
+}
+
+export function CandidateForm({ onInterviewCreated }: CandidateFormProps) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
+  const [language, setLanguage] = useState<SupportedLanguage>("en");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError(null);
 
     try {
-      // TODO: Implement actual submission
-      await api.createInterview({ email, name });
+      console.log("Submitting interview:", { email, name });
+      
+      // Insert into Supabase - only fields that exist in the table
+      // id and created_at are handled by Supabase (uuid primary key, timestamp default)
+      const { data, error: insertError } = await supabase
+        .from("interviews")
+        .insert([
+          {
+            email: email,
+            name: name,
+            language: language,
+            status: "Email not sent",
+          },
+        ])
+        .select()
+        .single();
+
+      if (insertError) {
+        console.error("Supabase error:", insertError);
+        console.error("Error details:", {
+          message: insertError.message,
+          details: insertError.details,
+          hint: insertError.hint,
+          code: insertError.code,
+        });
+        const errorMsg = insertError.message || "Unknown error occurred";
+        setError(errorMsg);
+        throw insertError;
+      }
+
+      console.log("Interview created successfully:", data);
       setEmail("");
       setName("");
-    } catch (error) {
+      setLanguage("en");
+      setError(null);
+      
+      // Notify parent to refresh the interview list
+      if (onInterviewCreated) {
+        onInterviewCreated();
+      }
+    } catch (error: any) {
       console.error("Failed to create interview:", error);
+      if (!error?.message) {
+        setError("Failed to create interview. Please check the console for details.");
+      }
     } finally {
       setLoading(false);
     }
@@ -54,6 +101,28 @@ export function CandidateForm() {
             required
           />
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Language
+          </label>
+          <select
+            value={language}
+            onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            required
+          >
+            {SUPPORTED_LANGUAGES.map((lang) => (
+              <option key={lang.code} value={lang.code}>
+                {lang.name} ({lang.nativeName})
+              </option>
+            ))}
+          </select>
+        </div>
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
+            {error}
+          </div>
+        )}
         <button
           type="submit"
           disabled={loading}
