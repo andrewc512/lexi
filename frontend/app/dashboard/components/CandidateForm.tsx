@@ -12,7 +12,7 @@ interface CandidateFormProps {
 export function CandidateForm({ onInterviewCreated }: CandidateFormProps) {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [language, setLanguage] = useState<SupportedLanguage>("en");
+  const [language, setLanguage] = useState<SupportedLanguage>("es");
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -89,7 +89,7 @@ export function CandidateForm({ onInterviewCreated }: CandidateFormProps) {
       // Reset form
       setEmail("");
       setName("");
-      setLanguage("en");
+      setLanguage("es");
       setError(null);
       
       // Notify parent to refresh the interview list
