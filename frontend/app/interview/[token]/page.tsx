@@ -6,8 +6,10 @@ import { AudioStream, AudioStreamRef } from "./components/AudioStream";
 import { AIVoice } from "./components/AIVoice";
 import { TranscriptPanel } from "./components/TranscriptPanel";
 import { Timer } from "./components/Timer";
+import { ReadingPassage } from "./components/ReadingPassage";
 
 type InterviewState = "consent" | "interview" | "complete";
+type InterviewPhase = "conversation" | "reading";
 
 interface TranscriptEntry {
   id: string;
@@ -16,15 +18,24 @@ interface TranscriptEntry {
   timestamp: Date;
 }
 
+interface ReadingPassageData {
+  passage: string;
+  language: string;
+  difficulty: number;
+  instruction: string;
+}
+
 export default function InterviewPage({
   params,
 }: {
   params: { token: string };
 }) {
   const [state, setState] = useState<InterviewState>("consent");
+  const [phase, setPhase] = useState<InterviewPhase>("conversation");
   const [isRecording, setIsRecording] = useState(false);
   const [isAISpeaking, setIsAISpeaking] = useState(false);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
+  const [readingPassage, setReadingPassage] = useState<ReadingPassageData | null>(null);
   const audioStreamRef = useRef<AudioStreamRef>(null);
 
   const handleConsent = () => {
@@ -117,6 +128,31 @@ export default function InterviewPage({
           // User transcript is already handled in handleUserSpeech
           // but we could add it here for consistency
         }
+      } else if (message.type === "phase_transition") {
+        // Handle phase transition (e.g., to reading)
+        console.log("Phase transition to:", message.new_phase);
+        if (message.new_phase === "reading") {
+          setPhase("reading");
+        }
+        // Play the transition message audio
+        if (message.text) {
+          handleAIResponse(message.text, message.audio);
+        }
+      } else if (message.type === "reading_passage") {
+        // Display reading passage
+        console.log("Received reading passage");
+        setReadingPassage({
+          passage: message.passage,
+          language: message.language,
+          difficulty: message.difficulty,
+          instruction: message.instruction,
+        });
+      } else if (message.type === "reading_evaluation") {
+        // Handle reading evaluation feedback
+        console.log("Reading evaluation:", message.evaluation);
+        if (message.text) {
+          handleAIResponse(message.text, message.audio);
+        }
       }
     };
 
@@ -125,7 +161,7 @@ export default function InterviewPage({
     return () => {
       window.removeEventListener("ws-message" as any, handleWSMessage as any);
     };
-  }, [state]);
+  }, [state, handleAIResponse]);
 
   if (state === "consent") {
     return <ConsentScreen token={params.token} onConsent={handleConsent} />;
@@ -177,30 +213,41 @@ export default function InterviewPage({
       <main className="flex-1 flex overflow-hidden">
         {/* Video/Avatar area */}
         <div className="flex-1 flex items-center justify-center p-8 bg-gray-50">
-          <div className="relative">
-            {/* AI Avatar */}
-            <div
-              className={`w-64 h-64 rounded-full bg-blue-600 flex items-center justify-center transition-all duration-300 ${
-                isAISpeaking ? "ring-8 ring-blue-200 scale-105" : "ring-4 ring-blue-100"
-              }`}
-            >
-              <div className="text-center">
-                <div className="text-7xl mb-2">💬</div>
-                <span className="text-white font-semibold text-lg">Lexi AI</span>
+          {phase === "reading" && readingPassage ? (
+            // Reading phase - show passage
+            <ReadingPassage
+              passage={readingPassage.passage}
+              language={readingPassage.language}
+              difficulty={readingPassage.difficulty}
+              instruction={readingPassage.instruction}
+            />
+          ) : (
+            // Conversation phase - show AI avatar
+            <div className="relative">
+              {/* AI Avatar */}
+              <div
+                className={`w-64 h-64 rounded-full bg-blue-600 flex items-center justify-center transition-all duration-300 ${
+                  isAISpeaking ? "ring-8 ring-blue-200 scale-105" : "ring-4 ring-blue-100"
+                }`}
+              >
+                <div className="text-center">
+                  <div className="text-7xl mb-2">💬</div>
+                  <span className="text-white font-semibold text-lg">Lexi AI</span>
+                </div>
               </div>
-            </div>
 
-            {/* Speaking indicator */}
-            {isAISpeaking && (
-              <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1">
-                <span className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
-                <span className="w-1 h-4 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
-                <span className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
-                <span className="w-1 h-5 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "450ms" }} />
-                <span className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "600ms" }} />
-              </div>
-            )}
-          </div>
+              {/* Speaking indicator */}
+              {isAISpeaking && (
+                <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-1">
+                  <span className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1 h-4 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "300ms" }} />
+                  <span className="w-1 h-5 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "450ms" }} />
+                  <span className="w-1 h-3 bg-blue-600 rounded-full animate-pulse" style={{ animationDelay: "600ms" }} />
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Transcript sidebar */}

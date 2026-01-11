@@ -13,12 +13,14 @@ Flow:
 """
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from typing import List
+from typing import List, Optional
 import json
 import asyncio
 from io import BytesIO
+import time
 
 from app.services import stt, llm, tts
+from app.services.reading_assessment import reading_manager
 
 router = APIRouter()
 
@@ -46,6 +48,13 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     # Initialize conversation state for this interview
     conversation_history: List[dict] = []
     expecting_audio = False
+
+    # Reading assessment state
+    interview_start_time = time.time()
+    in_reading_phase = False
+    current_reading_passage: Optional[str] = None
+    reading_evaluations: List[dict] = []
+    reading_difficulty = 3  # Start at moderate difficulty
 
     try:
         # Send initial AI greeting
@@ -86,7 +95,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     # Generate AI response
                     ai_response = await llm.generate_interview_response(
                         conversation_history=conversation_history,
-                        target_language="Chinese"
+                        target_language="Korean"
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
@@ -112,7 +121,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     try:
                         # Transcribe the audio
                         print(f"🎤 Transcribing audio...")
-                        transcript = await stt.transcribe_audio(audio_data, language="Chinese")
+                        transcript = await stt.transcribe_audio(audio_data, language="Korean")
 
                         if transcript and transcript.strip():
                             print(f"📝 User said: {transcript}")
@@ -126,28 +135,123 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             # Add to conversation history
                             conversation_history.append({"role": "user", "content": transcript})
 
-                            # Generate AI response using LLM
-                            print(f"🤖 Generating AI response...")
-                            ai_response = await llm.generate_interview_response(
-                                conversation_history=conversation_history,
-                                target_language="Chinese"
-                            )
+                            # Check if it's time to transition to reading phase
+                            if not in_reading_phase and reading_manager.should_transition_to_reading(
+                                interview_start_time
+                            ):
+                                print(f"⏰ 3 minutes elapsed - transitioning to reading phase")
+                                in_reading_phase = True
 
-                            conversation_history.append({"role": "assistant", "content": ai_response})
+                                # Send transition message
+                                transition_msg = reading_manager.get_transition_message("Korean")
+                                conversation_history.append({"role": "assistant", "content": transition_msg})
 
-                            print(f"💬 AI response: {ai_response}")
+                                # Generate TTS for transition
+                                audio_data = await tts.text_to_speech(transition_msg)
 
-                            # Generate TTS audio for response
-                            print(f"🔊 Generating TTS audio for AI response...")
-                            audio_data = await tts.text_to_speech(ai_response)
+                                await websocket.send_json({
+                                    "type": "phase_transition",
+                                    "speaker": "ai",
+                                    "text": transition_msg,
+                                    "audio": audio_data,
+                                    "new_phase": "reading"
+                                })
 
-                            # Send AI response with audio to frontend
-                            await websocket.send_json({
-                                "type": "transcript",
-                                "speaker": "ai",
-                                "text": ai_response,
-                                "audio": audio_data
-                            })
+                                # Generate first reading passage
+                                passage_data = await reading_manager.generate_reading_passage(
+                                    target_language="Korean",
+                                    difficulty_level=reading_difficulty
+                                )
+
+                                current_reading_passage = passage_data["passage"]
+
+                                # Send reading passage to frontend
+                                await websocket.send_json({
+                                    "type": "reading_passage",
+                                    "passage": current_reading_passage,
+                                    "language": "Korean",
+                                    "difficulty": reading_difficulty,
+                                    "instruction": "Please read this text and translate it to English."
+                                })
+
+                            elif in_reading_phase:
+                                # Process reading translation
+                                print(f"📖 Processing reading translation...")
+
+                                if current_reading_passage:
+                                    evaluation = await reading_manager.evaluate_reading_translation(
+                                        original_passage=current_reading_passage,
+                                        user_translation=transcript,
+                                        target_language="Korean",
+                                        difficulty_level=reading_difficulty
+                                    )
+
+                                    reading_evaluations.append(evaluation)
+
+                                    # Send evaluation feedback
+                                    feedback_msg = (
+                                        f"Great job! Your translation scored "
+                                        f"{evaluation['accuracy_score']:.0f}% for accuracy. "
+                                        f"{evaluation.get('feedback', '')}"
+                                    )
+
+                                    audio_data = await tts.text_to_speech(feedback_msg)
+
+                                    await websocket.send_json({
+                                        "type": "reading_evaluation",
+                                        "speaker": "ai",
+                                        "text": feedback_msg,
+                                        "audio": audio_data,
+                                        "evaluation": evaluation
+                                    })
+
+                                    # Generate next reading passage
+                                    # Adjust difficulty based on performance
+                                    if evaluation['accuracy_score'] > 85:
+                                        reading_difficulty = min(10, reading_difficulty + 1)
+                                    elif evaluation['accuracy_score'] < 60:
+                                        reading_difficulty = max(1, reading_difficulty - 1)
+
+                                    passage_data = await reading_manager.generate_reading_passage(
+                                        target_language="Korean",
+                                        difficulty_level=reading_difficulty,
+                                        previous_passages=[current_reading_passage]
+                                    )
+
+                                    current_reading_passage = passage_data["passage"]
+
+                                    await websocket.send_json({
+                                        "type": "reading_passage",
+                                        "passage": current_reading_passage,
+                                        "language": "Korean",
+                                        "difficulty": reading_difficulty,
+                                        "instruction": "Here's the next passage. Please translate it to English."
+                                    })
+
+                            else:
+                                # Normal conversation phase
+                                # Generate AI response using LLM
+                                print(f"🤖 Generating AI response...")
+                                ai_response = await llm.generate_interview_response(
+                                    conversation_history=conversation_history,
+                                    target_language="Korean"
+                                )
+
+                                conversation_history.append({"role": "assistant", "content": ai_response})
+
+                                print(f"💬 AI response: {ai_response}")
+
+                                # Generate TTS audio for response
+                                print(f"🔊 Generating TTS audio for AI response...")
+                                audio_data = await tts.text_to_speech(ai_response)
+
+                                # Send AI response with audio to frontend
+                                await websocket.send_json({
+                                    "type": "transcript",
+                                    "speaker": "ai",
+                                    "text": ai_response,
+                                    "audio": audio_data
+                                })
                         else:
                             print(f"⚠️ Empty transcript received")
                             await websocket.send_json({
@@ -171,6 +275,15 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     except WebSocketDisconnect:
         if interview_id in active_connections:
             del active_connections[interview_id]
+
+        # Calculate final reading proficiency if reading phase was completed
+        if reading_evaluations:
+            reading_proficiency = reading_manager.calculate_reading_proficiency(
+                reading_evaluations
+            )
+            print(f"📊 Final Reading Proficiency: {reading_proficiency}")
+            # TODO: Save reading proficiency to database
+
         # TODO: Save conversation to database
         print(f"Interview {interview_id} disconnected")
     except Exception as e:
@@ -183,3 +296,50 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
 async def websocket_test():
     """Test endpoint to verify WebSocket route is registered."""
     return {"status": "WebSocket endpoint available at /ws/interview/{interview_id}"}
+
+
+@router.post("/ws/interview/{interview_id}/force-reading")
+async def force_reading_phase(interview_id: str):
+    """
+    Force transition to reading phase (for testing).
+
+    This endpoint allows manual triggering of the reading phase
+    without waiting for the 3-minute timer.
+    """
+    if interview_id not in active_connections:
+        return {"error": "Interview not found or not connected"}
+
+    websocket = active_connections[interview_id]
+
+    try:
+        # Send transition message
+        transition_msg = reading_manager.get_transition_message("Korean")
+        audio_data = await tts.text_to_speech(transition_msg)
+
+        await websocket.send_json({
+            "type": "phase_transition",
+            "speaker": "ai",
+            "text": transition_msg,
+            "audio": audio_data,
+            "new_phase": "reading"
+        })
+
+        # Generate first reading passage
+        passage_data = await reading_manager.generate_reading_passage(
+            target_language="Korean",
+            difficulty_level=3
+        )
+
+        await websocket.send_json({
+            "type": "reading_passage",
+            "passage": passage_data["passage"],
+            "language": "Korean",
+            "difficulty": 3,
+            "instruction": "Please read this text and translate it to English."
+        })
+
+        return {"status": "Reading phase initiated", "interview_id": interview_id}
+
+    except Exception as e:
+        print(f"Error forcing reading phase: {e}")
+        return {"error": str(e)}
