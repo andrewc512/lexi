@@ -142,14 +142,14 @@ async def _save_partial_evaluation(
     final_grammar = reading_proficiency.get("grammar_score") or avg_grammar
     final_fluency = reading_proficiency.get("fluency_score") or avg_fluency
     
-    # Calculate overall score (average of grammar and fluency, scaled to 100)
+    # Calculate overall score (average of grammar and fluency, already on 0-100 scale)
     scores = [s for s in [final_grammar, final_fluency] if s is not None]
-    overall_score = (sum(scores) / len(scores)) * 10 if scores else 0  # Scale from 0-10 to 0-100
+    overall_score = (sum(scores) / len(scores)) if scores else 0
     
     # Generate meaningful feedback summary
     feedback = _generate_performance_summary(
-        grammar_score=overall_score if final_grammar else None,  # Use scaled score
-        fluency_score=(final_fluency * 10) if final_fluency else None,  # Scale to 100
+        grammar_score=final_grammar,
+        fluency_score=final_fluency,
         speaking_count=len(speaking_evaluations),
         reading_count=len(reading_evaluations),
         proficiency_level=reading_proficiency.get("proficiency_level")
@@ -393,12 +393,12 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                         final_fluency = reading_proficiency.get("fluency_score") or avg_fluency
                                         
                                         scores = [s for s in [final_grammar, final_fluency] if s is not None]
-                                        overall_score = (sum(scores) / len(scores)) * 10 if scores else reading_proficiency.get("overall_score", 0)
+                                        overall_score = (sum(scores) / len(scores)) if scores else reading_proficiency.get("overall_score", 0)
                                         
                                         # Generate meaningful feedback
                                         feedback = _generate_performance_summary(
-                                            grammar_score=overall_score,
-                                            fluency_score=(final_fluency * 10) if final_fluency else None,
+                                            grammar_score=final_grammar,
+                                            fluency_score=final_fluency,
                                             speaking_count=len(speaking_evaluations),
                                             reading_count=len(reading_evaluations),
                                             proficiency_level=reading_proficiency.get("proficiency_level")
