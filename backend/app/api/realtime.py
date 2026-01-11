@@ -31,12 +31,87 @@ active_connections: dict[str, WebSocket] = {}
 conversation_states: dict[str, dict] = {}
 
 
+def _generate_performance_summary(
+    grammar_score: float,
+    fluency_score: float,
+    speaking_count: int,
+    reading_count: int,
+    proficiency_level: str = None
+) -> str:
+    """Generate a human-readable performance summary based on scores."""
+    
+    # Determine performance levels
+    def get_level(score):
+        if score is None:
+            return None
+        if score >= 90:
+            return "excellent"
+        elif score >= 75:
+            return "strong"
+        elif score >= 60:
+            return "moderate"
+        elif score >= 40:
+            return "developing"
+        else:
+            return "beginning"
+    
+    grammar_level = get_level(grammar_score)
+    fluency_level = get_level(fluency_score)
+    
+    # Build summary
+    parts = []
+    
+    # Overall impression
+    avg_score = ((grammar_score or 0) + (fluency_score or 0)) / 2 if grammar_score or fluency_score else 0
+    if avg_score >= 85:
+        parts.append("The candidate demonstrated strong language proficiency throughout the assessment.")
+    elif avg_score >= 70:
+        parts.append("The candidate showed solid language skills with room for improvement.")
+    elif avg_score >= 50:
+        parts.append("The candidate displayed developing language abilities with notable areas for growth.")
+    else:
+        parts.append("The candidate is at an early stage of language development.")
+    
+    # Grammar feedback
+    if grammar_level:
+        grammar_feedback = {
+            "excellent": "Grammar usage was nearly flawless with sophisticated sentence structures.",
+            "strong": "Grammar was generally accurate with minor errors.",
+            "moderate": "Grammar showed basic competency with some recurring errors.",
+            "developing": "Grammar needs improvement, with frequent errors in sentence structure.",
+            "beginning": "Grammar fundamentals require significant practice."
+        }
+        parts.append(grammar_feedback[grammar_level])
+    
+    # Fluency feedback
+    if fluency_level:
+        fluency_feedback = {
+            "excellent": "Speech was natural and confident with excellent flow.",
+            "strong": "Communication was clear and relatively smooth.",
+            "moderate": "Fluency was adequate but with some hesitation.",
+            "developing": "Speech flow was choppy with noticeable pauses.",
+            "beginning": "Fluency is limited and requires more practice."
+        }
+        parts.append(fluency_feedback[fluency_level])
+    
+    # Add proficiency level if available
+    if proficiency_level:
+        parts.append(f"Estimated CEFR level: {proficiency_level}.")
+    
+    # Exercise summary
+    total = speaking_count + reading_count
+    if total > 0:
+        parts.append(f"Completed {total} exercise{'s' if total > 1 else ''} ({speaking_count} speaking, {reading_count} reading).")
+    
+    return " ".join(parts)
+
+
 async def _save_partial_evaluation(
     interview_id: str,
     speaking_evaluations: list,
     reading_evaluations: list,
     reading_manager,
-    feedback_msg: str
+    _unused_msg: str = None  # Kept for compatibility, not used
 ):
     """Save evaluation data from whatever exercises were completed."""
     if not speaking_evaluations and not reading_evaluations:
@@ -71,13 +146,22 @@ async def _save_partial_evaluation(
     scores = [s for s in [final_grammar, final_fluency] if s is not None]
     overall_score = (sum(scores) / len(scores)) * 10 if scores else 0  # Scale from 0-10 to 0-100
     
+    # Generate meaningful feedback summary
+    feedback = _generate_performance_summary(
+        grammar_score=overall_score if final_grammar else None,  # Use scaled score
+        fluency_score=(final_fluency * 10) if final_fluency else None,  # Scale to 100
+        speaking_count=len(speaking_evaluations),
+        reading_count=len(reading_evaluations),
+        proficiency_level=reading_proficiency.get("proficiency_level")
+    )
+    
     evaluation_data = {
         "overall_score": round(overall_score, 1),
         "grammar_score": round(final_grammar, 1) if final_grammar else None,
         "fluency_score": round(final_fluency, 1) if final_fluency else None,
         "proficiency_level": reading_proficiency.get("proficiency_level"),
         "reading_level": reading_proficiency.get("reading_level"),
-        "feedback": feedback_msg,
+        "feedback": feedback,
         "speaking_exercises": len(speaking_evaluations),
         "reading_exercises": len(reading_evaluations),
         "total_exercises": len(speaking_evaluations) + len(reading_evaluations),
@@ -298,15 +382,40 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                             reading_evaluations
                                         )
 
+                                        # Calculate combined scores from speaking + reading
+                                        speaking_grammar = [e.get("grammar_score", 0) for e in speaking_evaluations if e.get("grammar_score")]
+                                        speaking_fluency = [e.get("fluency_score", 0) for e in speaking_evaluations if e.get("fluency_score")]
+                                        
+                                        avg_grammar = sum(speaking_grammar) / len(speaking_grammar) if speaking_grammar else None
+                                        avg_fluency = sum(speaking_fluency) / len(speaking_fluency) if speaking_fluency else None
+                                        
+                                        final_grammar = reading_proficiency.get("grammar_score") or avg_grammar
+                                        final_fluency = reading_proficiency.get("fluency_score") or avg_fluency
+                                        
+                                        scores = [s for s in [final_grammar, final_fluency] if s is not None]
+                                        overall_score = (sum(scores) / len(scores)) * 10 if scores else reading_proficiency.get("overall_score", 0)
+                                        
+                                        # Generate meaningful feedback
+                                        feedback = _generate_performance_summary(
+                                            grammar_score=overall_score,
+                                            fluency_score=(final_fluency * 10) if final_fluency else None,
+                                            speaking_count=len(speaking_evaluations),
+                                            reading_count=len(reading_evaluations),
+                                            proficiency_level=reading_proficiency.get("proficiency_level")
+                                        )
+
                                         # Save evaluation to Supabase
                                         evaluation_data = {
-                                            "overall_score": reading_proficiency.get("overall_score", 0),
-                                            "grammar_score": reading_proficiency.get("grammar_score"),
-                                            "fluency_score": reading_proficiency.get("fluency_score"),
+                                            "overall_score": round(overall_score, 1),
+                                            "grammar_score": round(final_grammar, 1) if final_grammar else None,
+                                            "fluency_score": round(final_fluency, 1) if final_fluency else None,
                                             "proficiency_level": reading_proficiency.get("proficiency_level"),
                                             "reading_level": reading_proficiency.get("reading_level"),
-                                            "feedback": reading_proficiency.get("feedback", "Assessment completed successfully."),
-                                            "total_exercises": len(reading_evaluations)
+                                            "feedback": feedback,
+                                            "speaking_exercises": len(speaking_evaluations),
+                                            "reading_exercises": len(reading_evaluations),
+                                            "total_exercises": len(speaking_evaluations) + len(reading_evaluations),
+                                            "completed": True
                                         }
                                         await update_interview_evaluation(interview_id, evaluation_data)
 
