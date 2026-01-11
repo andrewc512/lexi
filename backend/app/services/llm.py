@@ -10,6 +10,7 @@ This service handles all LLM interactions for:
 
 import json
 from typing import List, Optional, Dict
+from datetime import datetime, timezone
 from app.models.session import LanguageExercise, SessionState
 from openai import AsyncOpenAI
 from app.core.config import settings
@@ -90,9 +91,9 @@ async def agent_decide_next_exercise(
 
     Analyzes:
     - Current phase (speaking_test vs translation_test)
+    - Time spent in each phase (1 min speaking, 1.5 min translation)
     - Previous exercise performance
     - Current difficulty level
-    - Number of exercises completed
     - Whether to adjust difficulty
     - Whether to switch phases or conclude
 
@@ -111,6 +112,11 @@ async def agent_decide_next_exercise(
 
     # STUB: Simple logic - replace with LLM
     current_phase = session_state.current_phase
+    current_time = datetime.utcnow()
+
+    # Time limits for each phase
+    SPEAKING_DURATION_SECONDS = 60  # 1 minute
+    TRANSLATION_DURATION_SECONDS = 90  # 1.5 minutes
 
     if current_phase == "intro":
         return {
@@ -121,13 +127,18 @@ async def agent_decide_next_exercise(
         }
 
     if current_phase == "speaking_test":
-        if session_state.speaking_exercises_done >= 5:
-            return {
-                "action_type": "switch_phase",
-                "reasoning": "Completed speaking assessment, moving to translation",
-                "next_phase": "translation_test",
-                "difficulty_adjustment": 0
-            }
+        # Check if speaking phase time is up
+        if session_state.speaking_phase_start:
+            phase_start = datetime.fromisoformat(session_state.speaking_phase_start)
+            elapsed_seconds = (current_time - phase_start).total_seconds()
+
+            if elapsed_seconds >= SPEAKING_DURATION_SECONDS:
+                return {
+                    "action_type": "switch_phase",
+                    "reasoning": f"Speaking assessment time complete ({elapsed_seconds:.0f}s), moving to translation",
+                    "next_phase": "translation_test",
+                    "difficulty_adjustment": 0
+                }
 
         # Increase difficulty if they scored well
         if previous_exercise and previous_exercise.grammar_score and previous_exercise.grammar_score > 80:
@@ -146,13 +157,18 @@ async def agent_decide_next_exercise(
         }
 
     if current_phase == "translation_test":
-        if session_state.translation_exercises_done >= 5:
-            return {
-                "action_type": "conclude",
-                "reasoning": "Assessment complete",
-                "next_phase": "complete",
-                "difficulty_adjustment": 0
-            }
+        # Check if translation phase time is up
+        if session_state.translation_phase_start:
+            phase_start = datetime.fromisoformat(session_state.translation_phase_start)
+            elapsed_seconds = (current_time - phase_start).total_seconds()
+
+            if elapsed_seconds >= TRANSLATION_DURATION_SECONDS:
+                return {
+                    "action_type": "conclude",
+                    "reasoning": f"Translation assessment time complete ({elapsed_seconds:.0f}s)",
+                    "next_phase": "complete",
+                    "difficulty_adjustment": 0
+                }
 
         # Adjust difficulty based on translation accuracy
         if previous_exercise and previous_exercise.accuracy_score:
