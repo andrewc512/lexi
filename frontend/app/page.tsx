@@ -4,11 +4,30 @@ import { TypingAnimation } from "./components/TypingAnimation";
 
 const LANGUAGE_FLAGS: Record<string, string> = {
   en: "🇺🇸",
+  "zh-cn": "🇨🇳",
+  hi: "🇮🇳",
   es: "🇪🇸",
+  ar: "🇸🇦",
   fr: "🇫🇷",
+  bn: "🇧🇩",
+  pt: "🇵🇹",
+  ru: "🇷🇺",
+  ur: "🇵🇰",
+  id: "🇮🇩",
   de: "🇩🇪",
-  zh: "🇨🇳",
   ja: "🇯🇵",
+  pcm: "🇳🇬",
+  "ar-eg": "🇪🇬",
+  mr: "🇮🇳",
+  vi: "🇻🇳",
+  te: "🇮🇳",
+  pa: "🇵🇰",
+  wuu: "🇨🇳",
+  ko: "🇰🇷",
+  sw: "🇹🇿",
+  ha: "🇳🇬",
+  ta: "🇮🇳",
+  it: "🇮🇹",
 };
 
 export default function HomePage() {
