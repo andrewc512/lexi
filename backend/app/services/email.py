@@ -130,7 +130,7 @@ The Lexi Team
             <p>You've been invited to complete an AI-powered language assessment in <strong>{language}</strong>.</p>
             
             <div style="text-align: center;">
-                <a href="{interview_link}" class="button">Start Assessment</a>
+                <a href="{interview_link}" class="button" style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0;">Start Assessment</a>
             </div>
             
             <div class="info-box">
@@ -209,7 +209,7 @@ The Lexi Team
             <p>The language assessment for <strong>{candidate_name}</strong> has been completed.</p>
             
             <div style="text-align: center;">
-                <a href="{dashboard_link}" class="button">View Results</a>
+                <a href="{dashboard_link}" class="button" style="display: inline-block; background: #2563eb; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0;">View Results</a>
             </div>
             
             <p>Best regards,<br><strong>The Lexi Team</strong></p>
