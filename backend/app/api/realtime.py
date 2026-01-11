@@ -96,8 +96,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     # Generate AI response
                     ai_response = await llm.generate_interview_response(
                         conversation_history=conversation_history,
-                        target_language="Korean"
-                        target_language="Spanish"
+                        target_language=settings.DEFAULT_TARGET_LANGUAGE
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
@@ -123,8 +122,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     try:
                         # Transcribe the audio
                         print(f"🎤 Transcribing audio...")
-                        transcript = await stt.transcribe_audio(audio_data, language="Korean")
-                        transcript = await stt.transcribe_audio(audio_data, language="Spanish")
+                        transcript = await stt.transcribe_audio(audio_data, language=settings.DEFAULT_TARGET_LANGUAGE)
 
                         if transcript and transcript.strip():
                             print(f"📝 User said: {transcript}")
@@ -257,14 +255,8 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 print(f"🤖 Generating AI response...")
                                 ai_response = await llm.generate_interview_response(
                                     conversation_history=conversation_history,
-                                    target_language="Korean"
+                                    target_language=settings.DEFAULT_TARGET_LANGUAGE
                                 )
-                            # Generate AI response using LLM
-                            print(f"🤖 Generating AI response...")
-                            ai_response = await llm.generate_interview_response(
-                                conversation_history=conversation_history,
-                                target_language="Spanish"
-                            )
 
                                 conversation_history.append({"role": "assistant", "content": ai_response})
 
