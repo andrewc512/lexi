@@ -378,31 +378,92 @@ async def generate_translation_passage(
     previous_passages: List[str] = []
 ) -> str:
     """
-    Generate a passage to translate at the appropriate difficulty.
+    Generate a passage in the source language to translate to the target language.
 
     Difficulty levels:
     - 1-3: Simple sentences (present tense, common words)
     - 4-6: Moderate passages (mixed tenses, everyday topics)
     - 7-10: Complex passages (idioms, cultural references, technical vocab)
 
-    TODO: Implement with Claude to generate varied passages
+    Args:
+        source_language: Language to generate the passage in (e.g., "Spanish", "Korean")
+        target_language: Language to translate to (usually "English")
+        difficulty_level: 1-10 difficulty rating
+        previous_passages: Previously used passages to avoid repetition
+
+    Returns:
+        A passage written in the source_language
     """
 
-    # STUB: Hardcoded passages by difficulty
-    passages = {
-        1: "The cat is black. It sleeps on the sofa.",
-        2: "Yesterday I went to the market. I bought apples and bread.",
-        3: "My family lives in a small house near the beach. We love to swim in summer.",
-        4: "Last year, I traveled to Spain for the first time. The food was incredible and the people were very friendly.",
-        5: "If I had more time, I would learn to play the guitar. Music has always been important to me.",
-        6: "The company announced that it would be expanding into new markets next quarter, which surprised many investors.",
-        7: "Despite the challenges posed by climate change, renewable energy adoption continues to accelerate worldwide.",
-        8: "The author's subtle use of metaphor throughout the novel serves to underscore the protagonist's internal struggle.",
-        9: "Neuroscientists have discovered that synaptic plasticity plays a crucial role in memory consolidation during REM sleep.",
-        10: "The geopolitical ramifications of this diplomatic overture could potentially reshape the balance of power across the entire region."
+    # Map difficulty to complexity description
+    complexity_map = {
+        1: "very simple sentences with present tense and basic vocabulary (beginner A1 level)",
+        2: "simple sentences with common past and future tenses (beginner A2 level)",
+        3: "simple everyday topics with basic grammar structures (elementary A2 level)",
+        4: "moderate complexity with mixed tenses about everyday situations (intermediate B1 level)",
+        5: "moderate complexity with some idiomatic expressions (intermediate B1 level)",
+        6: "moderately complex passages with varied vocabulary (upper-intermediate B2 level)",
+        7: "complex passages with sophisticated vocabulary and idioms (upper-intermediate B2 level)",
+        8: "advanced passages with nuanced language and cultural references (advanced C1 level)",
+        9: "very advanced passages with technical or academic vocabulary (advanced C1 level)",
+        10: "highly sophisticated passages with complex structures and abstract concepts (mastery C2 level)"
     }
 
-    return passages.get(difficulty_level, passages[5])
+    complexity = complexity_map.get(difficulty_level, complexity_map[5])
+
+    # Build prompt to avoid repetition
+    avoid_topics = ""
+    if previous_passages:
+        avoid_topics = f"\n\nIMPORTANT: Do NOT write about topics similar to these previous passages:\n" + "\n".join(f"- {p[:100]}..." for p in previous_passages[-3:])
+
+    system_prompt = f"""You are a language assessment expert. Generate a reading passage in {source_language} that is appropriate for translation practice.
+
+Difficulty level: {difficulty_level}/10 - {complexity}
+
+Requirements:
+1. Write ONLY in {source_language} (not {target_language})
+2. Make it {complexity}
+3. Length: 2-4 sentences for levels 1-3, 3-5 sentences for levels 4-7, 4-6 sentences for levels 8-10
+4. Topics should be interesting and varied (culture, daily life, nature, technology, history, etc.)
+5. Use natural, authentic {source_language} - not simplified or overly formal{avoid_topics}
+
+Return ONLY the {source_language} passage text, nothing else."""
+
+    try:
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Generate a {source_language} reading passage at difficulty level {difficulty_level}."}
+            ],
+            temperature=0.8,  # Higher temperature for more variety
+            max_tokens=300
+        )
+
+        passage = response.choices[0].message.content.strip()
+
+        # Remove any quotation marks that might wrap the passage
+        if passage.startswith('"') and passage.endswith('"'):
+            passage = passage[1:-1]
+        if passage.startswith("'") and passage.endswith("'"):
+            passage = passage[1:-1]
+
+        return passage
+
+    except Exception as e:
+        print(f"Error generating translation passage: {e}")
+        # Fallback to a simple default
+        fallback_passages = {
+            "Spanish": "El gato duerme en el sofá. Es negro y muy tranquilo.",
+            "French": "Le chat dort sur le canapé. Il est noir et très calme.",
+            "German": "Die Katze schläft auf dem Sofa. Sie ist schwarz und sehr ruhig.",
+            "Korean": "고양이가 소파에서 자고 있습니다. 검은색이고 매우 조용합니다.",
+            "Japanese": "猫はソファーで寝ています。黒くてとても静かです。",
+            "Chinese": "猫在沙发上睡觉。它是黑色的，非常安静。",
+            "Italian": "Il gatto dorme sul divano. È nero e molto tranquillo.",
+            "Portuguese": "O gato dorme no sofá. Ele é preto e muito calmo."
+        }
+        return fallback_passages.get(source_language, "The cat sleeps on the sofa.")
 
 
 async def calculate_overall_proficiency(
