@@ -21,7 +21,7 @@ import time
 
 from app.services import stt, llm, tts
 from app.services.reading_assessment import reading_manager
-from app.services.supabase import get_interview_by_id, update_interview_status
+from app.services.supabase import get_interview_by_id, update_interview_status, update_interview_evaluation
 from app.core.config import settings
 
 router = APIRouter()
@@ -29,6 +29,63 @@ router = APIRouter()
 # Store active connections and their conversation state
 active_connections: dict[str, WebSocket] = {}
 conversation_states: dict[str, dict] = {}
+
+
+async def _save_partial_evaluation(
+    interview_id: str,
+    speaking_evaluations: list,
+    reading_evaluations: list,
+    reading_manager,
+    feedback_msg: str
+):
+    """Save evaluation data from whatever exercises were completed."""
+    if not speaking_evaluations and not reading_evaluations:
+        print(f"No evaluations to save for interview {interview_id}")
+        return
+    
+    # Calculate speaking scores
+    grammar_scores = []
+    fluency_scores = []
+    
+    for eval in speaking_evaluations:
+        if eval.get("grammar_score") is not None:
+            grammar_scores.append(eval["grammar_score"])
+        if eval.get("fluency_score") is not None:
+            fluency_scores.append(eval["fluency_score"])
+    
+    # Calculate reading proficiency if available
+    reading_proficiency = {}
+    if reading_evaluations:
+        reading_proficiency = reading_manager.calculate_reading_proficiency(reading_evaluations)
+        print(f"📊 Final Reading Proficiency: {reading_proficiency}")
+    
+    # Combine scores
+    avg_grammar = sum(grammar_scores) / len(grammar_scores) if grammar_scores else None
+    avg_fluency = sum(fluency_scores) / len(fluency_scores) if fluency_scores else None
+    
+    # Use reading scores if available, otherwise use speaking scores
+    final_grammar = reading_proficiency.get("grammar_score") or avg_grammar
+    final_fluency = reading_proficiency.get("fluency_score") or avg_fluency
+    
+    # Calculate overall score (average of grammar and fluency, scaled to 100)
+    scores = [s for s in [final_grammar, final_fluency] if s is not None]
+    overall_score = (sum(scores) / len(scores)) * 10 if scores else 0  # Scale from 0-10 to 0-100
+    
+    evaluation_data = {
+        "overall_score": round(overall_score, 1),
+        "grammar_score": round(final_grammar, 1) if final_grammar else None,
+        "fluency_score": round(final_fluency, 1) if final_fluency else None,
+        "proficiency_level": reading_proficiency.get("proficiency_level"),
+        "reading_level": reading_proficiency.get("reading_level"),
+        "feedback": feedback_msg,
+        "speaking_exercises": len(speaking_evaluations),
+        "reading_exercises": len(reading_evaluations),
+        "total_exercises": len(speaking_evaluations) + len(reading_evaluations),
+        "completed": False
+    }
+    
+    await update_interview_evaluation(interview_id, evaluation_data)
+    print(f"📊 Saved partial evaluation for interview {interview_id}")
 
 
 @router.websocket("/ws/interview/{interview_id}")
@@ -73,6 +130,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     reading_start_time: Optional[float] = None
     current_reading_passage: Optional[str] = None
     reading_evaluations: List[dict] = []
+    speaking_evaluations: List[dict] = []  # Track speaking evaluations
     reading_difficulty = 3  # Start at moderate difficulty
 
     try:
@@ -164,6 +222,9 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             print(f"{'='*50}")
                             print(f"")
                             
+                            # Track speaking evaluation
+                            speaking_evaluations.append(evaluation)
+                            
                             # Send user transcript to frontend
                             await websocket.send_json({
                                 "type": "transcript",
@@ -236,6 +297,18 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                         reading_proficiency = reading_manager.calculate_reading_proficiency(
                                             reading_evaluations
                                         )
+
+                                        # Save evaluation to Supabase
+                                        evaluation_data = {
+                                            "overall_score": reading_proficiency.get("overall_score", 0),
+                                            "grammar_score": reading_proficiency.get("grammar_score"),
+                                            "fluency_score": reading_proficiency.get("fluency_score"),
+                                            "proficiency_level": reading_proficiency.get("proficiency_level"),
+                                            "reading_level": reading_proficiency.get("reading_level"),
+                                            "feedback": reading_proficiency.get("feedback", "Assessment completed successfully."),
+                                            "total_exercises": len(reading_evaluations)
+                                        }
+                                        await update_interview_evaluation(interview_id, evaluation_data)
 
                                         # Send completion message
                                         completion_msg = (
@@ -356,20 +429,23 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
         if interview_id in active_connections:
             del active_connections[interview_id]
 
-        # Calculate final reading proficiency if reading phase was completed
-        if reading_evaluations:
-            reading_proficiency = reading_manager.calculate_reading_proficiency(
-                reading_evaluations
-            )
-            print(f"📊 Final Reading Proficiency: {reading_proficiency}")
-            # TODO: Save reading proficiency to database
+        # Save evaluation data if any exercises were completed
+        await _save_partial_evaluation(
+            interview_id, speaking_evaluations, reading_evaluations, 
+            reading_manager, "Interview disconnected."
+        )
 
-        # TODO: Save conversation to database
         print(f"Interview {interview_id} disconnected")
     except Exception as e:
         print(f"Error in WebSocket: {e}")
         if interview_id in active_connections:
             del active_connections[interview_id]
+        
+        # Save evaluation data even on error
+        await _save_partial_evaluation(
+            interview_id, speaking_evaluations, reading_evaluations,
+            reading_manager, f"Interview ended with error: {str(e)}"
+        )
 
 
 @router.get("/ws/test")
