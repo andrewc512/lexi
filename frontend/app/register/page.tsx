@@ -64,10 +64,6 @@ export default function RegisterPage() {
           >
             {loading ? "Redirecting to Google..." : "Sign up with Google"}
           </button>
-
-          <div className="text-xs text-gray-500 leading-relaxed">
-            No password required — we’ll use your Google account to secure access.
-          </div>
         </div>
 
         {/* Bottom */}
