@@ -56,10 +56,10 @@ export default function HomePage() {
           {/* Left Section - Content */}
           <div className="space-y-8">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight">
-              The most efficient way to interview candidates
+              The most efficient way to assess fluency
             </h1>
             <p className="text-xl text-gray-600 leading-relaxed">
-              Conduct AI-powered interviews, get instant candidate evaluations, and streamline your hiring process with the world's most advanced interview platform.
+              Conduct AI-powered language assessments, get instant candidate evaluations, and streamline your hiring process with the world's most advanced language interview platform.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
               <Link
@@ -122,16 +122,16 @@ export default function HomePage() {
         <div className="mt-20 pt-12 border-t border-gray-200">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             <div>
-              <div className="text-3xl font-bold text-gray-900">500+</div>
+              <div className="text-3xl font-bold text-gray-900">1+</div>
               <div className="text-sm text-gray-600 mt-1">Companies</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-gray-900">10K+</div>
+              <div className="text-3xl font-bold text-gray-900">2+</div>
               <div className="text-sm text-gray-600 mt-1">Interviews Conducted</div>
             </div>
             <div>
-              <div className="text-3xl font-bold text-gray-900">85%</div>
-              <div className="text-sm text-gray-600 mt-1">Time Saved</div>
+              <div className="text-3xl font-bold text-gray-900">8</div>
+              <div className="text-sm text-gray-600 mt-1">Languages Supported</div>
             </div>
             <div>
               <div className="text-3xl font-bold text-gray-900">4.9/5</div>

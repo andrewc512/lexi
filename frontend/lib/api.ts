@@ -40,4 +40,28 @@ export const api = {
       body: formData,
     });
   },
+
+  async sendInterviewEmail(interviewId: string, candidateEmail: string, candidateName: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/email/send-invite`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        interview_id: interviewId,
+        candidate_email: candidateEmail,
+        candidate_name: candidateName,
+      }),
+    });
+    if (!response.ok) {
+      throw new Error("Failed to send email");
+    }
+  },
+
+  async deleteInterview(interviewId: string): Promise<void> {
+    const response = await fetch(`${API_BASE_URL}/interviews/${interviewId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      throw new Error("Failed to delete interview");
+    }
+  },
 };
