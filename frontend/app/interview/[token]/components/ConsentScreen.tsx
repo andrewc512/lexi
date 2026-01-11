@@ -123,7 +123,7 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
         </button>
 
         <p className="text-center text-gray-500 text-sm mt-4">
-          Interview duration: ~5 minutes
+          Interview duration: ~1 minute
         </p>
       </div>
     </div>
