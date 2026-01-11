@@ -60,6 +60,21 @@ export const AudioStream = forwardRef<AudioStreamRef, AudioStreamProps>(
                 }
                 const wsEvent = new CustomEvent("ws-message", { detail: message });
                 window.dispatchEvent(wsEvent);
+              } else if (message.type === "phase_transition") {
+                // Phase transition (e.g., switching to reading)
+                console.log("🔄 Phase transition:", message.new_phase);
+                const wsEvent = new CustomEvent("ws-message", { detail: message });
+                window.dispatchEvent(wsEvent);
+              } else if (message.type === "reading_passage") {
+                // Reading passage to translate
+                console.log("📖 Reading passage received");
+                const wsEvent = new CustomEvent("ws-message", { detail: message });
+                window.dispatchEvent(wsEvent);
+              } else if (message.type === "reading_evaluation") {
+                // Reading translation evaluation
+                console.log("✅ Reading evaluation received");
+                const wsEvent = new CustomEvent("ws-message", { detail: message });
+                window.dispatchEvent(wsEvent);
               } else if (message.type === "error") {
                 console.error("❌ Error from server:", message.message);
               }
