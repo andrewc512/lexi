@@ -86,7 +86,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     # Generate AI response
                     ai_response = await llm.generate_interview_response(
                         conversation_history=conversation_history,
-                        target_language="Chinese"
+                        target_language="Spanish"
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
@@ -112,10 +112,30 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     try:
                         # Transcribe the audio
                         print(f"🎤 Transcribing audio...")
-                        transcript = await stt.transcribe_audio(audio_data, language="Chinese")
+                        transcript = await stt.transcribe_audio(audio_data, language="Spanish")
 
                         if transcript and transcript.strip():
                             print(f"📝 User said: {transcript}")
+                            
+                            # Evaluate the user's Spanish speech
+                            print(f"📊 Evaluating speech...")
+                            evaluation = await llm.evaluate_speaking_exercise(
+                                transcript=transcript,
+                                target_language="Spanish",
+                                difficulty_level=3
+                            )
+                            print(f"")
+                            print(f"{'='*50}")
+                            print(f"📊 EVALUATION RESULTS")
+                            print(f"{'='*50}")
+                            print(f"Grammar Score: {evaluation['grammar_score']}")
+                            print(f"Fluency Score: {evaluation['fluency_score']}")
+                            print(f"Feedback: {evaluation['feedback']}")
+                            print(f"Errors: {evaluation['errors']}")
+                            print(f"Strengths: {evaluation['strengths']}")
+                            print(f"{'='*50}")
+                            print(f"")
+                            
                             # Send user transcript to frontend
                             await websocket.send_json({
                                 "type": "transcript",
@@ -130,7 +150,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             print(f"🤖 Generating AI response...")
                             ai_response = await llm.generate_interview_response(
                                 conversation_history=conversation_history,
-                                target_language="Chinese"
+                                target_language="Spanish"
                             )
 
                             conversation_history.append({"role": "assistant", "content": ai_response})

@@ -106,10 +106,24 @@ class LanguageAssessmentAgent:
         )
 
         # Step 6: Update session state
+        # Build the base state update
+        state_updates = {
+            "current_phase": action.next_phase if action.next_phase else session_state.current_phase,
+            "current_difficulty": new_difficulty
+        }
+        
+        # If concluding, add proficiency scores to the state
+        if action.action_type == "conclude" and "proficiency" in next_exercise_data:
+            proficiency = next_exercise_data["proficiency"]
+            state_updates["overall_grammar_score"] = proficiency.get("grammar_score")
+            state_updates["overall_fluency_score"] = proficiency.get("fluency_score")
+            state_updates["overall_proficiency_level"] = proficiency.get("proficiency_level")
+        
         updated_state = SessionState(
-            **session_state.model_dump(exclude={"current_phase", "current_difficulty", "last_updated"}),
-            current_phase=action.next_phase if action.next_phase else session_state.current_phase,
-            current_difficulty=new_difficulty
+            **session_state.model_dump(exclude={"current_phase", "current_difficulty", "last_updated", 
+                                                 "overall_grammar_score", "overall_fluency_score", 
+                                                 "overall_proficiency_level"}),
+            **state_updates
         )
 
         # Add insight
@@ -200,7 +214,8 @@ class LanguageAssessmentAgent:
             return {
                 "instruction_text": f"Assessment complete! Your {session_state.target_language} proficiency level is {proficiency['proficiency_level']}. "
                                    f"Grammar: {proficiency['grammar_score']:.1f}%, Fluency: {proficiency['fluency_score']:.1f}%",
-                "audio_url": None
+                "audio_url": None,
+                "proficiency": proficiency  # Pass proficiency data back
             }
 
         elif action.action_type == "speaking_prompt" or (
