@@ -14,7 +14,18 @@ export function TypingAnimation() {
   const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    // Guard against empty languages array
+    if (LANGUAGES.length === 0) {
+      return;
+    }
+
     const currentLanguage = LANGUAGES[currentIndex];
+    
+    // Guard against undefined language
+    if (!currentLanguage) {
+      return;
+    }
+
     let timeout: NodeJS.Timeout;
 
     // If we've finished typing, pause then start deleting
