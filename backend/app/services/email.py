@@ -130,7 +130,7 @@ The Lexi Team
             <p>You've been invited to complete an AI-powered language assessment in <strong>{language}</strong>.</p>
             
             <div style="text-align: center;">
-                <a href="{interview_link}" class="button">Start Assessment</a>
+                <a href="{interview_link}" class="button" style="color: white">Start Assessment</a>
             </div>
             
             <div class="info-box">
