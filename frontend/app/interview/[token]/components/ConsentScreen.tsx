@@ -24,25 +24,30 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
   const canStart = micPermission === "granted" && agreed;
 
   return (
-    <div className="min-h-screen bg-[#1a1a1a] flex items-center justify-center p-8">
+    <div className="min-h-screen bg-white flex items-center justify-center p-8">
       <div className="max-w-lg w-full">
         <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <span className="text-3xl">🎙️</span>
+          <div className="flex items-center justify-center space-x-2 mb-4">
+            <div className="flex space-x-1">
+              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+              <div className="w-2 h-2 bg-blue-600 rounded-full"></div>
+            </div>
+            <span className="text-2xl font-semibold text-gray-900">Lexi</span>
           </div>
-          <h1 className="text-2xl font-semibold text-white mb-2">Ready to Begin?</h1>
-          <p className="text-gray-400">Complete these steps before starting your interview</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Ready to Begin?</h1>
+          <p className="text-gray-600">Complete these steps before starting your interview</p>
         </div>
 
-        <div className="bg-[#242424] rounded-xl p-6 space-y-6">
+        <div className="bg-white border border-gray-200 rounded-2xl p-6 space-y-6 shadow-sm">
           {/* Microphone permission */}
           <div className="flex items-start gap-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-              micPermission === "granted" 
-                ? "bg-green-500/20 text-green-400"
+              micPermission === "granted"
+                ? "bg-green-100 text-green-600"
                 : micPermission === "denied"
-                ? "bg-red-500/20 text-red-400"
-                : "bg-gray-700 text-gray-400"
+                ? "bg-red-100 text-red-600"
+                : "bg-gray-100 text-gray-500"
             }`}>
               {micPermission === "granted" ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -55,20 +60,20 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
               )}
             </div>
             <div className="flex-1">
-              <h3 className="text-white font-medium mb-1">Microphone Access</h3>
-              <p className="text-gray-400 text-sm mb-3">
+              <h3 className="text-gray-900 font-semibold mb-1">Microphone Access</h3>
+              <p className="text-gray-600 text-sm mb-3">
                 We need access to your microphone for the voice conversation.
               </p>
               {micPermission === "pending" && (
                 <button
                   onClick={requestMicPermission}
-                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                  className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors font-medium"
                 >
                   Allow Microphone
                 </button>
               )}
               {micPermission === "denied" && (
-                <p className="text-red-400 text-sm">
+                <p className="text-red-600 text-sm font-medium">
                   Microphone access denied. Please enable it in your browser settings.
                 </p>
               )}
@@ -78,7 +83,7 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
           {/* Consent checkbox */}
           <div className="flex items-start gap-4">
             <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-              agreed ? "bg-green-500/20 text-green-400" : "bg-gray-700 text-gray-400"
+              agreed ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-500"
             }`}>
               {agreed ? (
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -91,8 +96,8 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
               )}
             </div>
             <div className="flex-1">
-              <h3 className="text-white font-medium mb-1">Recording Consent</h3>
-              <p className="text-gray-400 text-sm mb-3">
+              <h3 className="text-gray-900 font-semibold mb-1">Recording Consent</h3>
+              <p className="text-gray-600 text-sm mb-3">
                 This interview will be recorded and transcribed for evaluation purposes.
               </p>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -100,9 +105,9 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
                   type="checkbox"
                   checked={agreed}
                   onChange={(e) => setAgreed(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                  className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <span className="text-gray-300 text-sm">I agree to be recorded</span>
+                <span className="text-gray-700 text-sm">I agree to be recorded</span>
               </label>
             </div>
           </div>
@@ -112,7 +117,7 @@ export function ConsentScreen({ token, onConsent }: ConsentScreenProps) {
         <button
           onClick={onConsent}
           disabled={!canStart}
-          className="w-full mt-6 py-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white font-medium rounded-xl hover:opacity-90 disabled:opacity-40 disabled:cursor-not-allowed transition-opacity"
+          className="w-full mt-6 py-4 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           Start Interview
         </button>

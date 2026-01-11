@@ -37,10 +37,10 @@ export function Timer({ onExpire }: TimerProps) {
 
   return (
     <div className="flex items-center gap-2">
-      <span className={`font-mono text-sm ${isLowTime ? "text-red-400" : "text-gray-400"}`}>
+      <span className={`font-mono text-sm font-medium ${isLowTime ? "text-red-600" : "text-gray-700"}`}>
         {formatTime(elapsed)}
       </span>
-      <span className="text-gray-600">/</span>
+      <span className="text-gray-400">/</span>
       <span className="text-gray-500 font-mono text-sm">
         {formatTime(INTERVIEW_DURATION_MINUTES * 60)}
       </span>

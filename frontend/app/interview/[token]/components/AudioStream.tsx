@@ -11,6 +11,7 @@ interface AudioStreamProps {
 export interface AudioStreamRef {
   startRecording: () => void;
   stopRecording: () => void;
+  autoStartRecording: () => void; // For auto-start after AI speaks
 }
 
 export const AudioStream = forwardRef<AudioStreamRef, AudioStreamProps>(
@@ -136,6 +137,14 @@ export const AudioStream = forwardRef<AudioStreamRef, AudioStreamProps>(
         if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
           mediaRecorderRef.current.stop();
           console.log("⏹️ Recording stopped");
+        }
+      },
+      autoStartRecording: () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === "inactive") {
+          audioChunksRef.current = [];
+          mediaRecorderRef.current.start(100); // Collect in 100ms chunks
+          onRecordingChange(true);
+          console.log("🎙️ Auto-recording started after AI response");
         }
       },
     }));
