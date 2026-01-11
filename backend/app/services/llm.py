@@ -115,8 +115,8 @@ async def agent_decide_next_exercise(
     current_time = datetime.utcnow()
 
     # Time limits for each phase
-    SPEAKING_DURATION_SECONDS = 60  # 1 minute
-    TRANSLATION_DURATION_SECONDS = 90  # 1.5 minutes
+    SPEAKING_DURATION_SECONDS = 120  # 2 minutes
+    TRANSLATION_DURATION_SECONDS = 120  # 2 minutes
 
     if current_phase == "intro":
         return {
@@ -337,21 +337,97 @@ async def evaluate_translation_exercise(
             "errors": ["'hacer' translated too literally", "Tense mismatch"],
             "correct_translation": "The suggested optimal translation..."
         }
-
-    TODO: Implement with Claude API for translation evaluation
     """
+    
+    # Handle empty or very short translations
+    if not user_translation or len(user_translation.strip()) < 3:
+        return {
+            "accuracy_score": 0.0,
+            "grammar_score": 0.0,
+            "feedback": "No translation provided or response was too short.",
+            "errors": ["No meaningful translation provided"],
+            "correct_translation": "Please provide a translation of the passage."
+        }
+    
+    try:
+        system_prompt = f"""You are an expert {source_language} to {target_language} translation evaluator. Analyze the user's translation and provide a detailed evaluation.
 
-    # STUB: Mock evaluation
-    return {
-        "accuracy_score": 82.0,
-        "grammar_score": 78.0,
-        "feedback": "Good overall translation, captured main meaning well.",
-        "errors": [
-            "Idiomatic expression not translated naturally",
-            "Minor tense inconsistency"
-        ],
-        "correct_translation": "A more natural translation would be: ..."
-    }
+Original passage ({source_language}):
+"{original_passage}"
+
+Difficulty level: {difficulty_level}/10 (1=beginner, 10=advanced)
+
+Evaluate based on:
+1. Accuracy - How well does the translation capture the meaning of the original? Are key ideas preserved?
+2. Grammar - Is the {target_language} grammatically correct?
+3. Naturalness - Does the translation sound natural in {target_language}? Are idioms handled well?
+4. Completeness - Are all parts of the original passage translated?
+
+Be encouraging but honest. Adjust your expectations based on the difficulty level - be more lenient for beginners.
+
+You MUST respond in this exact JSON format:
+{{
+    "accuracy_score": <number 0-100>,
+    "grammar_score": <number 0-100>,
+    "feedback": "<2-3 sentence summary of their translation quality>",
+    "errors": ["<specific error 1>", "<specific error 2>"],
+    "correct_translation": "<the ideal/suggested translation of the passage>"
+}}
+
+If the translation is perfect, use an empty array: "errors": []
+Always provide an encouraging and constructive feedback message."""
+
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Evaluate this translation to {target_language}:\n\n\"{user_translation}\""}
+            ],
+            temperature=0.3,
+            max_tokens=600
+        )
+        
+        # Parse the JSON response
+        response_text = response.choices[0].message.content.strip()
+        
+        # Try to extract JSON from the response
+        # Sometimes the model wraps it in markdown code blocks
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        evaluation = json.loads(response_text)
+        
+        # Ensure all required fields exist with proper types
+        return {
+            "accuracy_score": float(evaluation.get("accuracy_score", 50.0)),
+            "grammar_score": float(evaluation.get("grammar_score", 50.0)),
+            "feedback": str(evaluation.get("feedback", "Translation evaluated.")),
+            "errors": list(evaluation.get("errors", [])),
+            "correct_translation": str(evaluation.get("correct_translation", ""))
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parsing LLM response as JSON: {e}")
+        # Return a reasonable default if JSON parsing fails
+        return {
+            "accuracy_score": 60.0,
+            "grammar_score": 60.0,
+            "feedback": "Your translation was received. Keep practicing!",
+            "errors": [],
+            "correct_translation": "We couldn't generate a suggested translation."
+        }
+    except Exception as e:
+        print(f"Error evaluating translation exercise: {e}")
+        # Return a fallback response
+        return {
+            "accuracy_score": 50.0,
+            "grammar_score": 50.0,
+            "feedback": "We couldn't fully evaluate your translation. Please try again.",
+            "errors": [],
+            "correct_translation": ""
+        }
 
 
 async def generate_speaking_prompt(
