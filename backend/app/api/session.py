@@ -14,6 +14,7 @@ from app.models.session import AssessmentTurnResponse, SessionState
 from app.services.agent import assessment_agent
 from app.services import supabase
 from app.services import llm
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -103,7 +104,7 @@ async def submit_exercise(
         print(f"Warning: Session {assessment_id} not found, creating mock state")
         session_state = SessionState(
             assessment_id=assessment_id,
-            target_language="Spanish",
+            target_language=settings.DEFAULT_TARGET_LANGUAGE,
             current_phase="speaking_test",
             current_difficulty=2
         )
