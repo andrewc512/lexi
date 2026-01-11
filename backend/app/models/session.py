@@ -52,6 +52,10 @@ class SessionState(BaseModel):
     speaking_exercises_done: int = 0
     translation_exercises_done: int = 0
 
+    # Time tracking
+    speaking_phase_start: Optional[str] = None  # ISO timestamp when speaking phase started
+    translation_phase_start: Optional[str] = None  # ISO timestamp when translation phase started
+
     # Scoring
     overall_grammar_score: Optional[float] = None
     overall_fluency_score: Optional[float] = None
