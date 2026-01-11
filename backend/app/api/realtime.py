@@ -19,7 +19,7 @@ import asyncio
 from io import BytesIO
 import time
 
-from app.services import stt, llm, tts
+from app.services import stt, llm, tts, supabase
 from app.services.reading_assessment import reading_manager
 from app.services.supabase import get_interview_by_id, update_interview_status, update_interview_evaluation
 from app.core.config import settings
@@ -188,21 +188,17 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     active_connections[interview_id] = websocket
     print(f"✅ WebSocket connected for interview: {interview_id}")
 
-    # Fetch interview details from Supabase to get the language
-    interview_data = await get_interview_by_id(interview_id)
-    
-    if interview_data:
-        target_language = interview_data.get("language_name", settings.DEFAULT_TARGET_LANGUAGE)
-        candidate_name = interview_data.get("name", "there")
-        print(f"📋 Interview loaded: {candidate_name}, Language: {target_language}")
-        
-        # Update interview status to in_progress
-        await update_interview_status(interview_id, "in_progress")
+    # Get interview details to determine target language
+    interview = await supabase.get_interview_by_id(interview_id)
+    if interview and interview.get("language"):
+        target_language = stt.get_language_name(interview["language"])
+        print(f"🌐 Target language for interview {interview_id}: {target_language}")
     else:
-        # Fallback to default if interview not found
-        target_language = settings.DEFAULT_TARGET_LANGUAGE
-        candidate_name = "there"
-        print(f"⚠️ Interview {interview_id} not found in database, using default language: {target_language}")
+        target_language = "Korean"  # Default language
+        print(f"⚠️ No language found for interview {interview_id}, using default: {target_language}")
+
+    # Get candidate name from interview data
+    candidate_name = interview.get("candidate_name", "") if interview else ""
 
     # Initialize conversation state for this interview
     conversation_history: List[dict] = []
@@ -219,7 +215,10 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
 
     try:
         # Send initial AI greeting
-        greeting = f"Hello {candidate_name}! Thank you for joining. Let's begin the {target_language} language assessment. Tell me a bit about yourself and your background."
+        if candidate_name:
+            greeting = f"Hello {candidate_name}! Thank you for joining. Let's begin the {target_language} language assessment. Tell me a bit about yourself and your background."
+        else:
+            greeting = f"Hello! Thank you for joining. Let's begin the {target_language} language assessment. Tell me a bit about yourself and your background."
 
         # Generate TTS audio for greeting
         print(f"🔊 Generating TTS audio for greeting...")

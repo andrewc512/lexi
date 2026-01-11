@@ -13,7 +13,22 @@ from app.core.config import settings
 client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
 
 # Language code mapping for STT services
+# Maps both language codes (from frontend) and full names to ISO codes for Whisper API
 LANGUAGE_CODES = {
+    # Language codes (from frontend dropdown)
+    "es": "es",
+    "fr": "fr",
+    "de": "de",
+    "it": "it",
+    "pt": "pt",
+    "zh": "zh",
+    "ja": "ja",
+    "ko": "ko",
+    "ar": "ar",
+    "ru": "ru",
+    "hi": "hi",
+    "en": "en",
+    # Full language names (for backward compatibility)
     "Spanish": "es",
     "French": "fr",
     "German": "de",
@@ -27,6 +42,41 @@ LANGUAGE_CODES = {
     "Russian": "ru",
     "Hindi": "hi"
 }
+
+# Map language codes to full names for LLM API calls
+CODE_TO_LANGUAGE_NAME = {
+    "es": "Spanish",
+    "fr": "French",
+    "de": "German",
+    "it": "Italian",
+    "pt": "Portuguese",
+    "zh": "Chinese",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "ar": "Arabic",
+    "ru": "Russian",
+    "hi": "Hindi",
+    "en": "English"
+}
+
+
+def get_language_name(language_code_or_name: str) -> str:
+    """
+    Convert language code to full language name.
+    If already a full name, returns it unchanged.
+
+    Args:
+        language_code_or_name: Either a language code ("es") or full name ("Spanish")
+
+    Returns:
+        Full language name (e.g., "Spanish")
+    """
+    # If it's already a full language name, return it
+    if language_code_or_name in LANGUAGE_CODES and len(language_code_or_name) > 2:
+        return language_code_or_name
+
+    # Otherwise, convert code to name
+    return CODE_TO_LANGUAGE_NAME.get(language_code_or_name, "English")
 
 
 async def transcribe_audio(
