@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SUPPORTED_LANGUAGES } from "@/types/language";
+import { TypingAnimation } from "./components/TypingAnimation";
 
 const LANGUAGE_FLAGS: Record<string, string> = {
   en: "🇺🇸",
@@ -50,7 +51,7 @@ export default function HomePage() {
           {/* Left Section - Content */}
           <div className="space-y-8">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight">
-              Can you speak...
+              <TypingAnimation />
             </h1>
             <p className="text-xl text-gray-600 leading-relaxed">
               Are you a recruiter trying to gauge language proficiency? Lexi conducts AI-powered language assessment interviews to evaluate language fluency for your candidates.
