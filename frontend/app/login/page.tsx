@@ -67,10 +67,6 @@ export default function LoginPage() {
           >
             {loading ? "Redirecting to Google..." : "Continue with Google"}
           </button>
-
-          <p className="text-xs text-gray-500 leading-relaxed">
-            By continuing, you agree to Lexi’s Terms and Privacy Policy.
-          </p>
         </div>
 
         {/* Bottom */}

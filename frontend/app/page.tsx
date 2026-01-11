@@ -15,22 +15,6 @@ export default function HomePage() {
             </div>
             <span className="text-2xl font-semibold text-gray-900">Lexi</span>
           </div>
-          
-          {/* Navigation Links - Hidden on mobile */}
-          <div className="hidden lg:flex items-center space-x-8">
-            <Link href="#why" className="text-gray-600 hover:text-gray-900 transition-colors">
-              Why Lexi?
-            </Link>
-            <Link href="#features" className="text-gray-600 hover:text-gray-900 transition-colors">
-              Features
-            </Link>
-            <Link href="#pricing" className="text-gray-600 hover:text-gray-900 transition-colors">
-              Pricing
-            </Link>
-            <Link href="#testimonials" className="text-gray-600 hover:text-gray-900 transition-colors">
-              Testimonials
-            </Link>
-          </div>
 
           {/* Auth Buttons */}
           <div className="flex items-center space-x-4">
@@ -69,9 +53,6 @@ export default function HomePage() {
                 Start Interviewing
                 <span className="ml-2 group-hover:translate-x-1 transition-transform">→</span>
               </Link>
-              <div className="flex items-center space-x-2 text-sm text-gray-500">
-                <span>✓ No credit card required</span>
-              </div>
             </div>
           </div>
 
