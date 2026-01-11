@@ -1,4 +1,14 @@
 import Link from "next/link";
+import { SUPPORTED_LANGUAGES } from "@/types/language";
+
+const LANGUAGE_FLAGS: Record<string, string> = {
+  en: "🇺🇸",
+  es: "🇪🇸",
+  fr: "🇫🇷",
+  de: "🇩🇪",
+  zh: "🇨🇳",
+  ja: "🇯🇵",
+};
 
 export default function HomePage() {
   return (
@@ -40,10 +50,10 @@ export default function HomePage() {
           {/* Left Section - Content */}
           <div className="space-y-8">
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 leading-tight">
-              The most efficient way to assess fluency
+              Can you speak...
             </h1>
             <p className="text-xl text-gray-600 leading-relaxed">
-              Conduct AI-powered language assessments, get instant candidate evaluations, and streamline your hiring process with the world's most advanced language interview platform.
+              Are you a recruiter trying to gauge language proficiency? Lexi conducts AI-powered language assessment interviews to evaluate language fluency for your candidates.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
               <Link
@@ -99,24 +109,20 @@ export default function HomePage() {
           </div>
         </div>
 
-        {/* Trust Indicators */}
-        <div className="mt-20 pt-12 border-t border-gray-200">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
-            <div>
-              <div className="text-3xl font-bold text-gray-900">1+</div>
-              <div className="text-sm text-gray-600 mt-1">Companies</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-gray-900">2+</div>
-              <div className="text-sm text-gray-600 mt-1">Interviews Conducted</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-gray-900">8</div>
-              <div className="text-sm text-gray-600 mt-1">Languages Supported</div>
-            </div>
-            <div>
-              <div className="text-3xl font-bold text-gray-900">4.9/5</div>
-              <div className="text-sm text-gray-600 mt-1">Average Rating</div>
+        {/* Languages Supported */}
+        <div className="mt-24 pt-16 pb-16 border-t border-gray-200">
+          <div className="text-center space-y-6">
+            <h2 className="text-3xl md:text-4xl text-gray-900">Languages Supported</h2>
+            <div className="flex flex-wrap justify-center items-center gap-x-6 gap-y-3 text-lg text-gray-700">
+              {SUPPORTED_LANGUAGES.map((lang, index) => (
+                <span key={lang.code} className="font-medium flex items-center gap-2">
+                  <span className="text-2xl">{LANGUAGE_FLAGS[lang.code]}</span>
+                  {lang.name}
+                  {index < SUPPORTED_LANGUAGES.length - 1 && (
+                    <span className="mx-3 text-gray-400">•</span>
+                  )}
+                </span>
+              ))}
             </div>
           </div>
         </div>
