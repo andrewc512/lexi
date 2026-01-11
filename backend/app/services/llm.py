@@ -8,6 +8,7 @@ This service handles all LLM interactions for:
 - Agentic decision-making
 """
 
+import json
 from typing import List, Optional, Dict
 from app.models.session import LanguageExercise, SessionState
 from openai import AsyncOpenAI
@@ -190,7 +191,7 @@ async def evaluate_speaking_exercise(
     difficulty_level: int
 ) -> dict:
     """
-    Evaluate a speaking exercise for grammar and fluency.
+    Evaluate a speaking exercise for grammar and fluency using OpenAI.
 
     Analyzes:
     - Grammar correctness
@@ -206,24 +207,94 @@ async def evaluate_speaking_exercise(
             "errors": ["'I goes' should be 'I go'", "Missing article before 'car'"],
             "strengths": ["Natural sentence flow", "Good vocabulary range"]
         }
-
-    TODO: Implement with Claude API for grammar checking
     """
+    
+    # Handle empty or very short transcripts
+    if not transcript or len(transcript.strip()) < 3:
+        return {
+            "grammar_score": 0.0,
+            "fluency_score": 0.0,
+            "feedback": "No speech detected or response was too short.",
+            "errors": ["No meaningful response provided"],
+            "strengths": []
+        }
+    
+    try:
+        system_prompt = f"""You are an expert {target_language} language evaluator. Analyze the following speech transcript and provide a detailed evaluation.
 
-    # STUB: Mock evaluation
-    return {
-        "grammar_score": 75.0,
-        "fluency_score": 80.0,
-        "feedback": "Generally good, but some minor grammar issues.",
-        "errors": [
-            "Subject-verb agreement error in sentence 2",
-            "Incorrect preposition usage"
-        ],
-        "strengths": [
-            "Natural conversational flow",
-            "Good vocabulary variety"
-        ]
-    }
+Difficulty level: {difficulty_level}/10 (1=beginner, 10=advanced)
+
+Evaluate based on:
+1. Grammar correctness - Are verb conjugations, gender agreements, sentence structures correct?
+2. Fluency/Naturalness - Does it sound natural? Is the flow smooth? Is vocabulary appropriate?
+3. Vocabulary usage - Is the vocabulary appropriate for the difficulty level?
+
+Be encouraging but honest. Adjust your expectations based on the difficulty level - be more lenient for beginners.
+
+You MUST respond in this exact JSON format:
+{{
+    "grammar_score": <number 0-100>,
+    "fluency_score": <number 0-100>,
+    "feedback": "<2-3 sentence summary of their performance>",
+    "errors": ["<specific error 1>", "<specific error 2>"],
+    "strengths": ["<strength 1>", "<strength 2>"]
+}}
+
+If there are no errors, use an empty array: "errors": []
+If there are no notable strengths, use: "strengths": ["Good effort"]
+Always include at least one item in strengths to be encouraging."""
+
+        response = await client.chat.completions.create(
+            model="gpt-4",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Evaluate this {target_language} speech:\n\n\"{transcript}\""}
+            ],
+            temperature=0.3,
+            max_tokens=500
+        )
+        
+        # Parse the JSON response
+        response_text = response.choices[0].message.content.strip()
+        
+        # Try to extract JSON from the response
+        # Sometimes the model wraps it in markdown code blocks
+        if "```json" in response_text:
+            response_text = response_text.split("```json")[1].split("```")[0].strip()
+        elif "```" in response_text:
+            response_text = response_text.split("```")[1].split("```")[0].strip()
+        
+        evaluation = json.loads(response_text)
+        
+        # Ensure all required fields exist with proper types
+        return {
+            "grammar_score": float(evaluation.get("grammar_score", 50.0)),
+            "fluency_score": float(evaluation.get("fluency_score", 50.0)),
+            "feedback": str(evaluation.get("feedback", "Evaluation completed.")),
+            "errors": list(evaluation.get("errors", [])),
+            "strengths": list(evaluation.get("strengths", ["Good effort"]))
+        }
+        
+    except json.JSONDecodeError as e:
+        print(f"Error parsing LLM response as JSON: {e}")
+        # Return a reasonable default if JSON parsing fails
+        return {
+            "grammar_score": 60.0,
+            "fluency_score": 60.0,
+            "feedback": "Your response was received. Keep practicing!",
+            "errors": [],
+            "strengths": ["Good effort in attempting the exercise"]
+        }
+    except Exception as e:
+        print(f"Error evaluating speaking exercise: {e}")
+        # Return a fallback response
+        return {
+            "grammar_score": 50.0,
+            "fluency_score": 50.0,
+            "feedback": "We couldn't fully evaluate your response. Please try again.",
+            "errors": [],
+            "strengths": ["Thank you for participating"]
+        }
 
 
 async def evaluate_translation_exercise(

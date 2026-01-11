@@ -13,6 +13,7 @@ from typing import Optional
 from app.models.session import AssessmentTurnResponse, SessionState
 from app.services.agent import assessment_agent
 from app.services import supabase
+from app.services import llm
 
 router = APIRouter()
 
@@ -39,10 +40,10 @@ async def start_assessment(
         Initial prompt + session state
     """
 
-    # TODO: Verify assessment doesn't already exist
-    # existing_session = await supabase.get_session_state(assessment_id)
-    # if existing_session:
-    #     raise HTTPException(status_code=400, detail="Assessment already started")
+    # Check if assessment already exists
+    existing_session = await supabase.get_session_state(assessment_id)
+    if existing_session:
+        raise HTTPException(status_code=400, detail="Assessment already started")
 
     # Start assessment with agent
     try:
@@ -53,8 +54,8 @@ async def start_assessment(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to start assessment: {str(e)}")
 
-    # TODO: Store session state in database
-    # await supabase.create_session_state(session_state)
+    # Store session state in database
+    await supabase.create_session_state(session_state)
 
     return AssessmentTurnResponse(
         agent_response=initial_response,
@@ -95,19 +96,17 @@ async def submit_exercise(
             detail="Must provide either audio file or translation text"
         )
 
-    # TODO: Load session state from database
-    # session_state = await supabase.get_session_state(assessment_id)
-    # if not session_state:
-    #     raise HTTPException(status_code=404, detail="Assessment not found. Start assessment first.")
-
-    # STUB: For now, create mock session state
-    # Replace with actual database load
-    session_state = SessionState(
-        assessment_id=assessment_id,
-        target_language="Spanish",  # TODO: Load from DB
-        current_phase="speaking_test",
-        current_difficulty=2
-    )
+    # Load session state from database
+    session_state = await supabase.get_session_state(assessment_id)
+    if not session_state:
+        # Fallback: create new session if not found (for development)
+        print(f"Warning: Session {assessment_id} not found, creating mock state")
+        session_state = SessionState(
+            assessment_id=assessment_id,
+            target_language="Spanish",
+            current_phase="speaking_test",
+            current_difficulty=2
+        )
 
     # Read audio if provided
     audio_bytes = None
@@ -126,13 +125,13 @@ async def submit_exercise(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to process exercise: {str(e)}")
 
-    # TODO: Store updated state in database
-    # await supabase.update_session_state(assessment_id, updated_state)
+    # Store updated state in database
+    await supabase.update_session_state(assessment_id, updated_state)
 
-    # TODO: If assessment concluded, store final evaluation
-    # if not response.should_continue:
-    #     proficiency = await llm.calculate_overall_proficiency(updated_state)
-    #     await supabase.store_final_evaluation(assessment_id, proficiency)
+    # If assessment concluded, store final evaluation
+    if not response.should_continue:
+        proficiency = await llm.calculate_overall_proficiency(updated_state)
+        await supabase.store_final_evaluation(assessment_id, proficiency)
 
     return AssessmentTurnResponse(
         agent_response=response,
@@ -153,19 +152,10 @@ async def get_assessment_state(assessment_id: str) -> SessionState:
     - Frontend state synchronization
     """
 
-    # TODO: Load from database
-    # session_state = await supabase.get_session_state(assessment_id)
-    # if not session_state:
-    #     raise HTTPException(status_code=404, detail="Assessment not found")
-    # return session_state
-
-    # STUB: Return mock state
-    return SessionState(
-        assessment_id=assessment_id,
-        target_language="Spanish",
-        current_phase="speaking_test",
-        current_difficulty=3
-    )
+    session_state = await supabase.get_session_state(assessment_id)
+    if not session_state:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+    return session_state
 
 
 @router.get("/results/{assessment_id}")
@@ -179,34 +169,77 @@ async def get_results(assessment_id: str):
     - Detailed feedback per exercise
     """
 
-    # TODO: Load from database
-    # session_state = await supabase.get_session_state(assessment_id)
-    # if not session_state:
-    #     raise HTTPException(status_code=404, detail="Assessment not found")
+    session_state = await supabase.get_session_state(assessment_id)
+    if not session_state:
+        raise HTTPException(status_code=404, detail="Assessment not found")
 
-    # if session_state.current_phase != "complete":
-    #     raise HTTPException(status_code=400, detail="Assessment not yet completed")
+    # Calculate strengths and areas for improvement from exercises
+    strengths = []
+    areas_for_improvement = []
+    
+    for exercise in session_state.exercises_completed:
+        if exercise.grammar_score and exercise.grammar_score >= 80:
+            if "Strong grammar skills" not in strengths:
+                strengths.append("Strong grammar skills")
+        elif exercise.grammar_score and exercise.grammar_score < 60:
+            if "Grammar accuracy" not in areas_for_improvement:
+                areas_for_improvement.append("Grammar accuracy")
+        
+        if exercise.fluency_score and exercise.fluency_score >= 80:
+            if "Natural conversational flow" not in strengths:
+                strengths.append("Natural conversational flow")
+        elif exercise.fluency_score and exercise.fluency_score < 60:
+            if "Speaking fluency" not in areas_for_improvement:
+                areas_for_improvement.append("Speaking fluency")
+        
+        if exercise.accuracy_score and exercise.accuracy_score >= 80:
+            if "Accurate translations" not in strengths:
+                strengths.append("Accurate translations")
+        elif exercise.accuracy_score and exercise.accuracy_score < 60:
+            if "Translation accuracy" not in areas_for_improvement:
+                areas_for_improvement.append("Translation accuracy")
 
-    # proficiency = await llm.calculate_overall_proficiency(session_state)
+    # Default feedback if lists are empty
+    if not strengths:
+        strengths = ["Good effort throughout the assessment"]
+    if not areas_for_improvement:
+        areas_for_improvement = ["Continue practicing regularly"]
 
-    # STUB: Return mock results
+    # Generate summary feedback based on proficiency level
+    level = session_state.overall_proficiency_level or "Unknown"
+    level_feedback = {
+        "A1": "Beginner level. Focus on building basic vocabulary and simple sentence structures.",
+        "A2": "Elementary level. Continue practicing everyday conversations and common expressions.",
+        "B1": "Intermediate level. Good foundation! Work on more complex grammar and idiomatic expressions.",
+        "B2": "Upper intermediate. Strong skills! Focus on nuance, style, and advanced vocabulary.",
+        "C1": "Advanced level. Excellent proficiency! Refine your academic and professional language use.",
+        "C2": "Mastery level. Near-native proficiency. Maintain through regular immersion."
+    }
+    
     return {
         "assessment_id": assessment_id,
-        "target_language": "Spanish",
-        "proficiency_level": "B1",
-        "overall_grammar_score": 78.5,
-        "overall_fluency_score": 72.0,
-        "exercises_completed": 10,
-        "feedback": "Good intermediate proficiency. Continue practicing verb conjugations.",
-        "strengths": [
-            "Natural conversational flow",
-            "Good vocabulary range",
-            "Accurate translations of common phrases"
-        ],
-        "areas_for_improvement": [
-            "Subjunctive mood usage",
-            "Complex sentence structures",
-            "Idiomatic expressions"
+        "target_language": session_state.target_language,
+        "proficiency_level": session_state.overall_proficiency_level,
+        "overall_grammar_score": session_state.overall_grammar_score,
+        "overall_fluency_score": session_state.overall_fluency_score,
+        "exercises_completed": len(session_state.exercises_completed),
+        "speaking_exercises_done": session_state.speaking_exercises_done,
+        "translation_exercises_done": session_state.translation_exercises_done,
+        "feedback": level_feedback.get(level, "Complete more exercises for a detailed assessment."),
+        "strengths": strengths,
+        "areas_for_improvement": areas_for_improvement,
+        "exercises": [
+            {
+                "exercise_id": e.exercise_id,
+                "exercise_type": e.exercise_type,
+                "difficulty_level": e.difficulty_level,
+                "grammar_score": e.grammar_score,
+                "fluency_score": e.fluency_score,
+                "accuracy_score": e.accuracy_score,
+                "feedback": e.feedback,
+                "errors": e.errors
+            }
+            for e in session_state.exercises_completed
         ]
     }
 
@@ -222,13 +255,20 @@ async def end_assessment(assessment_id: str):
     - Archive session state
     """
 
-    # TODO: Load and finalize assessment
-    # session_state = await supabase.get_session_state(assessment_id)
-    # proficiency = await llm.calculate_overall_proficiency(session_state)
-    # await supabase.store_final_evaluation(assessment_id, proficiency)
-    # await supabase.update_assessment_status(assessment_id, "completed")
+    session_state = await supabase.get_session_state(assessment_id)
+    if not session_state:
+        raise HTTPException(status_code=404, detail="Assessment not found")
+
+    # Calculate final proficiency
+    proficiency = await llm.calculate_overall_proficiency(session_state)
+    
+    # Store final evaluation
+    await supabase.store_final_evaluation(assessment_id, proficiency)
 
     return {
         "message": "Assessment ended successfully",
-        "assessment_id": assessment_id
+        "assessment_id": assessment_id,
+        "proficiency_level": proficiency.get("proficiency_level"),
+        "grammar_score": proficiency.get("grammar_score"),
+        "fluency_score": proficiency.get("fluency_score")
     }
