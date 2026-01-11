@@ -25,8 +25,8 @@ class ReadingAssessmentManager:
     """
 
     # Duration constants (in seconds)
-    CONVERSATION_DURATION = 60  # 1 minute (for testing)
-    READING_DURATION = 90  # 1:30 minutes (for testing)
+    CONVERSATION_DURATION = 120  # 2 minutes
+    READING_DURATION = 120  # 2 minutes
 
     def __init__(self):
         """Initialize the reading assessment manager."""
