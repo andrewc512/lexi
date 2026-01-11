@@ -19,7 +19,14 @@ export function CandidateForm({ onInterviewCreated }: CandidateFormProps) {
   const [loadingMessage, setLoadingMessage] = useState("");
   const [error, setError] = useState<string | null>(null);
   const searchContainerRef = useRef<HTMLDivElement>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
+  // Get full language name from code
+  const getLanguageName = (code: SupportedLanguage): string => {
+    const lang = SUPPORTED_LANGUAGES.find((l) => l.code === code);
+    return lang?.name || "English";
+  };
+  
   // Filter languages based on search input
   const filteredLanguages = SUPPORTED_LANGUAGES.filter(
     (lang) =>
