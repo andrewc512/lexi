@@ -21,6 +21,7 @@ import time
 
 from app.services import stt, llm, tts
 from app.services.reading_assessment import reading_manager
+from app.services.supabase import get_interview_by_id, update_interview_status
 from app.core.config import settings
 
 router = APIRouter()
@@ -46,6 +47,22 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
     active_connections[interview_id] = websocket
     print(f"✅ WebSocket connected for interview: {interview_id}")
 
+    # Fetch interview details from Supabase to get the language
+    interview_data = await get_interview_by_id(interview_id)
+    
+    if interview_data:
+        target_language = interview_data.get("language_name", settings.DEFAULT_TARGET_LANGUAGE)
+        candidate_name = interview_data.get("name", "there")
+        print(f"📋 Interview loaded: {candidate_name}, Language: {target_language}")
+        
+        # Update interview status to in_progress
+        await update_interview_status(interview_id, "in_progress")
+    else:
+        # Fallback to default if interview not found
+        target_language = settings.DEFAULT_TARGET_LANGUAGE
+        candidate_name = "there"
+        print(f"⚠️ Interview {interview_id} not found in database, using default language: {target_language}")
+
     # Initialize conversation state for this interview
     conversation_history: List[dict] = []
     expecting_audio = False
@@ -60,7 +77,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
 
     try:
         # Send initial AI greeting
-        greeting = "Hello! Thank you for joining. Let's begin the interview. Tell me a bit about yourself and your background."
+        greeting = f"Hello {candidate_name}! Thank you for joining. Let's begin the {target_language} language assessment. Tell me a bit about yourself and your background."
 
         # Generate TTS audio for greeting
         print(f"🔊 Generating TTS audio for greeting...")
@@ -97,7 +114,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     # Generate AI response
                     ai_response = await llm.generate_interview_response(
                         conversation_history=conversation_history,
-                        target_language=settings.DEFAULT_TARGET_LANGUAGE
+                        target_language=target_language
                     )
 
                     conversation_history.append({"role": "assistant", "content": ai_response})
@@ -123,7 +140,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                     try:
                         # Transcribe the audio
                         print(f"🎤 Transcribing audio...")
-                        transcript = await stt.transcribe_audio(audio_data, language=settings.DEFAULT_TARGET_LANGUAGE)
+                        transcript = await stt.transcribe_audio(audio_data, language=target_language)
 
                         if transcript and transcript.strip():
                             print(f"📝 User said: {transcript}")
@@ -132,7 +149,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                             print(f"📊 Evaluating speech...")
                             evaluation = await llm.evaluate_speaking_exercise(
                                 transcript=transcript,
-                                target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                target_language=target_language,
                                 difficulty_level=3
                             )
                             print(f"")
@@ -166,7 +183,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 reading_start_time = time.time()
 
                                 # Send transition message
-                                transition_msg = reading_manager.get_transition_message(settings.DEFAULT_TARGET_LANGUAGE)
+                                transition_msg = reading_manager.get_transition_message(target_language)
                                 conversation_history.append({"role": "assistant", "content": transition_msg})
 
                                 # Generate TTS for transition
@@ -182,7 +199,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
 
                                 # Generate first reading passage
                                 passage_data = await reading_manager.generate_reading_passage(
-                                    target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                    target_language=target_language,
                                     difficulty_level=reading_difficulty
                                 )
 
@@ -192,7 +209,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 await websocket.send_json({
                                     "type": "reading_passage",
                                     "passage": current_reading_passage,
-                                    "language": settings.DEFAULT_TARGET_LANGUAGE,
+                                    "language": target_language,
                                     "difficulty": reading_difficulty,
                                     "instruction": "Please read this text and translate it to English."
                                 })
@@ -205,7 +222,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                     evaluation = await reading_manager.evaluate_reading_translation(
                                         original_passage=current_reading_passage,
                                         user_translation=transcript,
-                                        target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                        target_language=target_language,
                                         difficulty_level=reading_difficulty
                                     )
 
@@ -276,7 +293,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                         reading_difficulty = max(1, reading_difficulty - 1)
 
                                     passage_data = await reading_manager.generate_reading_passage(
-                                        target_language=settings.DEFAULT_TARGET_LANGUAGE,
+                                        target_language=target_language,
                                         difficulty_level=reading_difficulty,
                                         previous_passages=[current_reading_passage]
                                     )
@@ -286,7 +303,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                     await websocket.send_json({
                                         "type": "reading_passage",
                                         "passage": current_reading_passage,
-                                        "language": settings.DEFAULT_TARGET_LANGUAGE,
+                                        "language": target_language,
                                         "difficulty": reading_difficulty,
                                         "instruction": "Here's the next passage. Please translate it to English."
                                     })
@@ -297,7 +314,7 @@ async def interview_websocket(websocket: WebSocket, interview_id: str):
                                 print(f"🤖 Generating AI response...")
                                 ai_response = await llm.generate_interview_response(
                                     conversation_history=conversation_history,
-                                    target_language=settings.DEFAULT_TARGET_LANGUAGE
+                                    target_language=target_language
                                 )
 
                                 conversation_history.append({"role": "assistant", "content": ai_response})
@@ -374,9 +391,13 @@ async def force_reading_phase(interview_id: str):
 
     websocket = active_connections[interview_id]
 
+    # Get interview language from database
+    interview_data = await get_interview_by_id(interview_id)
+    target_language = interview_data.get("language_name", settings.DEFAULT_TARGET_LANGUAGE) if interview_data else settings.DEFAULT_TARGET_LANGUAGE
+
     try:
         # Send transition message
-        transition_msg = reading_manager.get_transition_message(settings.DEFAULT_TARGET_LANGUAGE)
+        transition_msg = reading_manager.get_transition_message(target_language)
         audio_data = await tts.text_to_speech(transition_msg)
 
         await websocket.send_json({
@@ -389,19 +410,19 @@ async def force_reading_phase(interview_id: str):
 
         # Generate first reading passage
         passage_data = await reading_manager.generate_reading_passage(
-            target_language="Korean",
+            target_language=target_language,
             difficulty_level=3
         )
 
         await websocket.send_json({
             "type": "reading_passage",
             "passage": passage_data["passage"],
-            "language": "Korean",
+            "language": target_language,
             "difficulty": 3,
             "instruction": "Please read this text and translate it to English."
         })
 
-        return {"status": "Reading phase initiated", "interview_id": interview_id}
+        return {"status": "Reading phase initiated", "interview_id": interview_id, "language": target_language}
 
     except Exception as e:
         print(f"Error forcing reading phase: {e}")
