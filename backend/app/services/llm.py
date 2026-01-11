@@ -9,6 +9,7 @@ This service handles all LLM interactions for:
 """
 
 import json
+import random
 from typing import List, Optional, Dict
 from datetime import datetime, timezone
 from app.models.session import LanguageExercise, SessionState
@@ -37,7 +38,40 @@ async def generate_interview_response(
         AI interviewer's next question or response
     """
     try:
-        # System prompt defining Lexi's personality
+        # Randomized conversation approaches to add variety
+        conversation_styles = [
+            "curious and interested in their personal experiences",
+            "enthusiastic about their hobbies and interests",
+            "focused on their daily life and routines",
+            "interested in their opinions and perspectives",
+            "engaged with their future plans and aspirations"
+        ]
+
+        topic_areas = [
+            ["travel experiences", "favorite places", "cultural observations"],
+            ["hobbies", "free time activities", "personal interests"],
+            ["work or studies", "daily routines", "typical day"],
+            ["family and friends", "social life", "relationships"],
+            ["food and cuisine", "cooking", "dining experiences"],
+            ["entertainment", "movies", "music", "books"],
+            ["current events", "opinions", "hypothetical scenarios"],
+            ["childhood memories", "past experiences", "life changes"]
+        ]
+
+        question_styles = [
+            "Ask open-ended questions that encourage detailed responses.",
+            "Use follow-up questions to dig deeper into their answers.",
+            "Ask about specific examples or stories related to what they mention.",
+            "Encourage them to describe things in detail, using rich vocabulary.",
+            "Ask comparative questions (What do you prefer? How does X compare to Y?)"
+        ]
+
+        # Randomly select conversation elements
+        selected_style = random.choice(conversation_styles)
+        selected_topics = random.choice(topic_areas)
+        selected_question_style = random.choice(question_styles)
+
+        # System prompt with randomized elements
         system_prompt = f"""You are Lexi, a friendly and encouraging language proficiency assessor specializing in {target_language}. Your role is to:
 
 1. Assess the user's {target_language} language proficiency through natural conversation
@@ -47,6 +81,12 @@ async def generate_interview_response(
 5. Adapt your questions based on their proficiency level (simpler if they struggle, more complex if they excel)
 6. Keep your responses under 2-3 sentences to encourage them to speak more
 7. Be supportive and focus on helping them demonstrate their best {target_language} abilities
+
+CONVERSATION APPROACH FOR THIS SESSION:
+- Be {selected_style}
+- Focus on topics like: {', '.join(selected_topics)}
+- {selected_question_style}
+- Vary your questions naturally based on what they say - don't be repetitive
 
 IMPORTANT LANGUAGE INSTRUCTIONS:
 - Your FIRST message should be in English to welcome them and explain the assessment
