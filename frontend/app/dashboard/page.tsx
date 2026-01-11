@@ -7,6 +7,12 @@ import { ReportModal } from "./components/ReportModal";
 
 export default function DashboardPage() {
   const [selectedInterview, setSelectedInterview] = useState<string | null>(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  const handleInterviewCreated = () => {
+    // Trigger a refresh of the interview table
+    setRefreshTrigger((prev) => prev + 1);
+  };
 
   return (
     <div className="min-h-screen p-8">
@@ -14,10 +20,13 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-1">
-          <CandidateForm />
+          <CandidateForm onInterviewCreated={handleInterviewCreated} />
         </div>
         <div className="lg:col-span-2">
-          <InterviewTable onSelectInterview={setSelectedInterview} />
+          <InterviewTable 
+            onSelectInterview={setSelectedInterview} 
+            refreshTrigger={refreshTrigger}
+          />
         </div>
       </div>
 
